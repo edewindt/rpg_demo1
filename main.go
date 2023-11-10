@@ -20,6 +20,7 @@ type GameState int
 const (
 	MenuState GameState = iota
 	PlayState
+	OptionsState
 )
 
 type Game struct {
@@ -40,6 +41,9 @@ type Game struct {
 func (g *Game) Update() error {
 	if g.keyPressCounter == nil {
 		g.keyPressCounter = make(map[ebiten.Key]int)
+	}
+	if g.state == OptionsState {
+		os.Exit(0)
 	}
 	if g.state == MenuState {
 		keys := []ebiten.Key{
@@ -76,7 +80,7 @@ func (g *Game) Update() error {
 			case 0: // Start the game
 				g.state = PlayState
 			case 1: // Options (if you have any)
-				os.Exit(0)
+				g.state = OptionsState
 			case 2: // Exit
 				os.Exit(0)
 			}
@@ -176,6 +180,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			opts.GeoM.Scale(-1, 1)                        // Flip horizontally
 			opts.GeoM.Translate(float64(g.frameWidth), 0) // Adjust the position after flipping
 		}
+		scale := 0.5
+		opts.GeoM.Scale(scale, scale)
 		opts.GeoM.Translate(g.x, g.y)
 		screen.DrawImage(frame, opts)
 	}
@@ -201,7 +207,7 @@ func loadSpriteSheets() map[string]*ebiten.Image {
 			spriteSheets["left"] = spriteSheets["right"]
 			break
 		}
-		path := "assets/player" + strings.Title(direction) + ".png"
+		path := "assets/player" + strings.Title(direction) + "Blue" + ".png"
 
 		// Load the image
 		img, _, err := ebitenutil.NewImageFromFile(path)
@@ -232,7 +238,7 @@ func main() {
 	}
 
 	// Configuration settings
-	ebiten.SetWindowSize(640, 480)
+	ebiten.SetWindowSize(640*2, 480*2)
 	ebiten.SetWindowTitle("Sprite Animation")
 
 	// Start the game
