@@ -21,25 +21,33 @@ type Game struct {
 }
 
 func (g *Game) Update() error {
+	speed := 2.0
+	movementKeyPressed := false
 
 	if ebiten.IsKeyPressed(ebiten.KeyLeft) {
-		g.x -= 2 // Move left
+		g.x -= speed // Move left
 		g.direction = "left"
+		movementKeyPressed = true
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyRight) {
-		g.x += 2 // Move right
+		g.x += speed // Move right
 		g.direction = "right"
+		movementKeyPressed = true
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyUp) {
-		g.y -= 2 // Move up
+		g.y -= speed // Move up
 		g.direction = "up"
+		movementKeyPressed = true
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyDown) {
-		g.y += 2 // Move down
+		g.y += speed // Move down
 		g.direction = "down"
+		movementKeyPressed = true
 	}
-	// Increment the tick count
-	g.tickCount++
+	if movementKeyPressed {
+		// Increment the tick count
+		g.tickCount++
+	}
 
 	// Update the current frame every 10 ticks
 	if g.tickCount >= 10 {
