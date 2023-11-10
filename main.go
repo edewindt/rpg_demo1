@@ -71,9 +71,9 @@ func main() {
 	// Create an instance of the Game struct
 	game := &Game{
 		spriteSheet: spriteSheet,
-		frameWidth:  16, // The width of a single frame
-		frameHeight: 16, // The height of a single frame
-		frameCount:  4,  // The total number of frames in the sprite sheet
+		frameWidth:  192 / 4, // The width of a single frame
+		frameHeight: 68,      // The height of a single frame
+		frameCount:  4,       // The total number of frames in the sprite sheet
 	}
 
 	// Configuration settings
