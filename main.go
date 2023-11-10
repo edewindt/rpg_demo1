@@ -1,6 +1,7 @@
 package main
 
 import (
+	"ebi/player"
 	"image"
 	"image/color"
 	"log"
@@ -24,14 +25,8 @@ const (
 )
 
 type Game struct {
-	frameWidth      int
-	frameHeight     int
-	frameCount      int
-	currentFrame    int
-	tickCount       int // Counter to track the number of updates
-	x, y            float64
-	spriteSheets    map[string]*ebiten.Image // Map of sprite sheets for each direction
-	direction       string
+	player          *player.Player
+	background      *ebiten.Image
 	state           GameState
 	menuOptions     []string
 	selectedOption  int
@@ -90,34 +85,31 @@ func (g *Game) Update() error {
 		movementKeyPressed := false
 
 		if ebiten.IsKeyPressed(ebiten.KeyLeft) {
-			g.x -= speed // Move left
-			g.direction = "left"
+
+			g.player.Move("left", speed)
 			movementKeyPressed = true
 		}
 		if ebiten.IsKeyPressed(ebiten.KeyRight) {
-			g.x += speed // Move right
-			g.direction = "right"
+			g.player.Move("right", speed)
 			movementKeyPressed = true
 		}
 		if ebiten.IsKeyPressed(ebiten.KeyUp) {
-			g.y -= speed // Move up
-			g.direction = "up"
+			g.player.Move("up", speed)
 			movementKeyPressed = true
 		}
 		if ebiten.IsKeyPressed(ebiten.KeyDown) {
-			g.y += speed // Move down
-			g.direction = "down"
+			g.player.Move("down", speed)
 			movementKeyPressed = true
 		}
 		if movementKeyPressed {
 			// Increment the tick count
-			g.tickCount++
+			g.player.TickCount++
 		}
 
 		// Update the current frame every 10 ticks
-		if g.tickCount >= 10 {
-			g.currentFrame = (g.currentFrame + 1) % g.frameCount
-			g.tickCount = 0 // Reset the tick count
+		if g.player.TickCount >= 10 {
+			g.player.CurrentFrame = (g.player.CurrentFrame + 1) % g.player.FrameCount
+			g.player.TickCount = 0 // Reset the tick count
 		}
 	}
 
@@ -165,24 +157,24 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			text.Draw(screen, option, fontFace, x, y+i*spacing, col)
 		}
 	} else if g.state == PlayState {
-		currentSpriteSheet := g.spriteSheets[g.direction]
+		currentSpriteSheet := g.player.SpriteSheets[g.player.Direction]
 		// Determine the x, y location of the current frame on the sprite sheet
-		sx := (g.currentFrame % (currentSpriteSheet.Bounds().Dx() / g.frameWidth)) * g.frameWidth
-		sy := (g.currentFrame / (currentSpriteSheet.Bounds().Dx() / g.frameWidth)) * g.frameHeight
+		sx := (g.player.CurrentFrame % (currentSpriteSheet.Bounds().Dx() / g.player.FrameWidth)) * g.player.FrameWidth
+		sy := (g.player.CurrentFrame / (currentSpriteSheet.Bounds().Dx() / g.player.FrameWidth)) * g.player.FrameHeight
 
 		// Create a sub-image that represents the current frame
-		frame := currentSpriteSheet.SubImage(image.Rect(sx, sy, sx+g.frameWidth, sy+g.frameHeight)).(*ebiten.Image)
+		frame := currentSpriteSheet.SubImage(image.Rect(sx, sy, sx+g.player.FrameWidth, sy+g.player.FrameHeight)).(*ebiten.Image)
 
 		// Draw the sub-image on the screen
 		opts := &ebiten.DrawImageOptions{}
 		// If the direction is left, flip the image on the vertical axis
-		if g.direction == "left" {
-			opts.GeoM.Scale(-1, 1)                        // Flip horizontally
-			opts.GeoM.Translate(float64(g.frameWidth), 0) // Adjust the position after flipping
+		if g.player.Direction == "left" {
+			opts.GeoM.Scale(-1, 1)                               // Flip horizontally
+			opts.GeoM.Translate(float64(g.player.FrameWidth), 0) // Adjust the position after flipping
 		}
 		scale := 0.5
 		opts.GeoM.Scale(scale, scale)
-		opts.GeoM.Translate(g.x, g.y)
+		opts.GeoM.Translate(g.player.X, g.player.Y)
 		screen.DrawImage(frame, opts)
 	}
 
@@ -207,7 +199,7 @@ func loadSpriteSheets() map[string]*ebiten.Image {
 			spriteSheets["left"] = spriteSheets["right"]
 			break
 		}
-		path := "assets/player" + strings.Title(direction) + "Blue" + ".png"
+		path := "assets/player" + strings.Title(direction) + "Black" + ".png"
 
 		// Load the image
 		img, _, err := ebitenutil.NewImageFromFile(path)
@@ -230,11 +222,17 @@ func main() {
 		state:          MenuState,
 		menuOptions:    []string{"Start Game", "Options", "Exit"},
 		selectedOption: 0,
-		spriteSheets:   spriteSheets,
-		frameWidth:     192 / 4, // The width of a single frame
-		frameHeight:    68,      // The height of a single frame
-		frameCount:     4,       // The total number of frames in the sprite sheet
-		direction:      "down",  // Default direction
+		player: &player.Player{
+			FrameWidth:   192 / 4, // The width of a single frame
+			FrameHeight:  68,      // The height of a single frame
+			FrameCount:   4,       // The total number of frames in the sprite sheet // Default direction
+			SpriteSheets: spriteSheets,
+			Direction:    "down",
+		},
+		// spriteSheets:   spriteSheets,
+		// FrameWidth:     192 / 4, // The width of a single frame
+		// FrameHeight:    68,      // The height of a single frame
+		// FrameCount:     4,       // The total number of frames in the sprite sheet // Default direction
 	}
 
 	// Configuration settings
