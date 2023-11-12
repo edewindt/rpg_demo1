@@ -27,6 +27,7 @@ const (
 type Game struct {
 	player          *player.Player
 	background      *ebiten.Image
+	bgPosX, bgPosY  float64
 	state           GameState
 	menuOptions     []string
 	selectedOption  int
@@ -157,12 +158,15 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			text.Draw(screen, option, fontFace, x, y+i*spacing, col)
 		}
 	} else if g.state == PlayState {
+		bgOpts := &ebiten.DrawImageOptions{}
+		bgOpts.GeoM.Translate(g.bgPosX, g.bgPosY)
+		screen.DrawImage(g.background, bgOpts)
 		currentSpriteSheet := g.player.SpriteSheets[g.player.Direction]
-		// Determine the x, y location of the current frame on the sprite sheet
+		// 	// Determine the x, y location of the current frame on the sprite sheet
 		sx := (g.player.CurrentFrame % (currentSpriteSheet.Bounds().Dx() / g.player.FrameWidth)) * g.player.FrameWidth
 		sy := (g.player.CurrentFrame / (currentSpriteSheet.Bounds().Dx() / g.player.FrameWidth)) * g.player.FrameHeight
 
-		// Create a sub-image that represents the current frame
+		// 	// Create a sub-image that represents the current frame
 		frame := currentSpriteSheet.SubImage(image.Rect(sx, sy, sx+g.player.FrameWidth, sy+g.player.FrameHeight)).(*ebiten.Image)
 
 		// Draw the sub-image on the screen
@@ -174,7 +178,14 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		}
 		scale := 0.5
 		opts.GeoM.Scale(scale, scale)
-		opts.GeoM.Translate(g.player.X, g.player.Y)
+		//Draw Character at the center of the screen
+		screenWidth := screen.Bounds().Dx()
+		screenHeight := screen.Bounds().Dy()
+		charWidth := frame.Bounds().Dx()
+		charHeight := frame.Bounds().Dy()
+		charX := float64(screenWidth)/2 - float64(charWidth)/2
+		charY := float64(screenHeight)/2 - float64(charHeight)/2
+		opts.GeoM.Translate(charX, charY)
 		screen.DrawImage(frame, opts)
 	}
 
@@ -213,15 +224,23 @@ func loadSpriteSheets() map[string]*ebiten.Image {
 
 	return spriteSheets
 }
+func loadBackground() *ebiten.Image {
+	bgImage, _, err := ebitenutil.NewImageFromFile("assets/myMap.png")
+	if err != nil {
+		log.Fatal(err)
+	}
+	return bgImage
+}
 func main() {
 	// Load the sprite sheet
 	spriteSheets := loadSpriteSheets()
-
+	background := loadBackground()
 	// Create an instance of the Game struct
 	game := &Game{
 		state:          MenuState,
 		menuOptions:    []string{"Start Game", "Options", "Exit"},
 		selectedOption: 0,
+		background:     background,
 		player: &player.Player{
 			FrameWidth:   192 / 4, // The width of a single frame
 			FrameHeight:  68,      // The height of a single frame
