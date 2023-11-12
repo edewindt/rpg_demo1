@@ -27,6 +27,7 @@ const (
 type Game struct {
 	player          *player.Player
 	background      *ebiten.Image
+	overBackground  *ebiten.Image
 	bgPosX, bgPosY  float64
 	state           GameState
 	menuOptions     []string
@@ -82,23 +83,44 @@ func (g *Game) Update() error {
 			}
 		}
 	} else if g.state == PlayState {
-		speed := 2.0
+		speed := 7.0
 		movementKeyPressed := false
 
-		if ebiten.IsKeyPressed(ebiten.KeyLeft) {
+		// if ebiten.IsKeyPressed(ebiten.KeyLeft) {
 
+		// 	g.player.Move("left", speed)
+		// 	movementKeyPressed = true
+		// }
+		// if ebiten.IsKeyPressed(ebiten.KeyRight) {
+		// 	g.player.Move("right", speed)
+		// 	movementKeyPressed = true
+		// }
+		// if ebiten.IsKeyPressed(ebiten.KeyUp) {
+		// 	g.player.Move("up", speed)
+		// 	movementKeyPressed = true
+		// }
+		// if ebiten.IsKeyPressed(ebiten.KeyDown) {
+		// 	g.player.Move("down", speed)
+		// 	movementKeyPressed = true
+		// }
+
+		if ebiten.IsKeyPressed(ebiten.KeyLeft) {
+			g.bgPosX += speed // Move background right
 			g.player.Move("left", speed)
 			movementKeyPressed = true
 		}
 		if ebiten.IsKeyPressed(ebiten.KeyRight) {
+			g.bgPosX -= speed // Move background left
 			g.player.Move("right", speed)
 			movementKeyPressed = true
 		}
 		if ebiten.IsKeyPressed(ebiten.KeyUp) {
+			g.bgPosY += speed // Move background down
 			g.player.Move("up", speed)
 			movementKeyPressed = true
 		}
 		if ebiten.IsKeyPressed(ebiten.KeyDown) {
+			g.bgPosY -= speed // Move background up
 			g.player.Move("down", speed)
 			movementKeyPressed = true
 		}
@@ -160,6 +182,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	} else if g.state == PlayState {
 		bgOpts := &ebiten.DrawImageOptions{}
 		bgOpts.GeoM.Translate(g.bgPosX, g.bgPosY)
+		bgScale := 0.5
+		bgOpts.GeoM.Scale(bgScale, bgScale)
 		screen.DrawImage(g.background, bgOpts)
 		currentSpriteSheet := g.player.SpriteSheets[g.player.Direction]
 		// 	// Determine the x, y location of the current frame on the sprite sheet
@@ -187,6 +211,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		charY := float64(screenHeight)/2 - float64(charHeight)/2
 		opts.GeoM.Translate(charX, charY)
 		screen.DrawImage(frame, opts)
+		screen.DrawImage(g.overBackground, bgOpts)
 	}
 
 }
@@ -224,23 +249,30 @@ func loadSpriteSheets() map[string]*ebiten.Image {
 
 	return spriteSheets
 }
-func loadBackground() *ebiten.Image {
+func loadBackground() (*ebiten.Image, *ebiten.Image) {
 	bgImage, _, err := ebitenutil.NewImageFromFile("assets/myMap.png")
 	if err != nil {
 		log.Fatal(err)
 	}
-	return bgImage
+	bgImage2, _, err := ebitenutil.NewImageFromFile("assets/over.png")
+	if err != nil {
+		log.Fatal(err)
+	}
+	return bgImage, bgImage2
 }
 func main() {
 	// Load the sprite sheet
 	spriteSheets := loadSpriteSheets()
-	background := loadBackground()
+	background, overBackground := loadBackground()
 	// Create an instance of the Game struct
 	game := &Game{
 		state:          MenuState,
 		menuOptions:    []string{"Start Game", "Options", "Exit"},
 		selectedOption: 0,
 		background:     background,
+		overBackground: overBackground,
+		bgPosX:         0,
+		bgPosY:         0,
 		player: &player.Player{
 			FrameWidth:   192 / 4, // The width of a single frame
 			FrameHeight:  68,      // The height of a single frame

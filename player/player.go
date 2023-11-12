@@ -16,16 +16,16 @@ type Player struct {
 func (p *Player) Move(dir string, speed float64) {
 	p.Direction = dir
 
-	switch dir {
-	case "left":
-		p.X -= speed // Move left
-	case "right":
-		p.X += speed // Move right
-	case "up":
-		p.Y -= speed // Move up
-	case "down":
-		p.Y += speed // Move down
-	}
+	// switch dir {
+	// case "left":
+	// 	p.X -= speed // Move left
+	// case "right":
+	// 	p.X += speed // Move right
+	// case "up":
+	// 	p.Y -= speed // Move up
+	// case "down":
+	// 	p.Y += speed // Move down
+	// }
 
 }
 
