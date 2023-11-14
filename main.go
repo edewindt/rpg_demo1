@@ -2,7 +2,6 @@ package main
 
 import (
 	"ebi/player"
-	"fmt"
 	"image"
 	"image/color"
 	"log"
@@ -80,17 +79,6 @@ func (g *Game) Update() error {
 	} else if g.state == PlayState {
 		movementKeyPressed := false
 		var moveX, moveY float64
-		// Character's central collision box (assuming the character is centered in the screen)
-		// screenWidth, screenHeight := ebiten.WindowSize()
-		// scale := 0.5 // The scale factor you mentioned
-
-		// Apply scaling to character's collision box
-		// charBox := image.Rect(
-		// 	(screenWidth/2)-(int(float64(g.player.FrameWidth)*scale)/2),
-		// 	(screenHeight/2)-(int(float64(g.player.FrameHeight)*scale)/2),
-		// 	(screenWidth/2)+(int(float64(g.player.FrameWidth)*scale)/2),
-		// 	(screenHeight/2)+(int(float64(g.player.FrameHeight)*scale)/2),
-		// )
 
 		if ebiten.IsKeyPressed(ebiten.KeyLeft) {
 			X, Y := g.player.CheckMove("left")
@@ -120,10 +108,10 @@ func (g *Game) Update() error {
 			moveY = Y
 			movementKeyPressed = true
 		}
-		if moveX != 0 {
-			fmt.Println(minX(moveX, g), minY(moveY, g))
-			fmt.Println(*g.obstacles[0])
-		}
+		// if moveX != 0 {
+		// 	fmt.Println(minX(moveX, g), minY(moveY, g))
+		// 	fmt.Println(*g.obstacles[0])
+		// }
 
 		for _, obstacle := range g.obstacles {
 			obsMinX := float64(obstacle.Min.X)
@@ -260,23 +248,23 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		opts.GeoM.Translate(charX, charY)
 		screen.DrawImage(frame, opts)
 		screen.DrawImage(g.Foreground, bgOpts)
-		for _, obstacle := range g.obstacles {
-			// Translate the obstacle's position based on the background position
-			obstacleOpts := &ebiten.DrawImageOptions{}
-			obstacleImage := ebiten.NewImage(obstacle.Dx(), obstacle.Dy())
-			obstacleColor := color.RGBA{255, 0, 0, 80} // Semi-transparent red color
-			obstacleOpts.GeoM.Translate(g.player.X, g.player.Y)
-			obstacleOpts.GeoM.Scale(scale, scale)
-			// Create a colored rectangle to represent the obstacle
+		// 	for _, obstacle := range g.obstacles {
+		// 		// Translate the obstacle's position based on the background position
+		// 		obstacleOpts := &ebiten.DrawImageOptions{}
+		// 		obstacleImage := ebiten.NewImage(obstacle.Dx(), obstacle.Dy())
+		// 		obstacleColor := color.RGBA{255, 0, 0, 80} // Semi-transparent red color
+		// 		obstacleOpts.GeoM.Translate(g.player.X, g.player.Y)
+		// 		obstacleOpts.GeoM.Scale(scale, scale)
+		// 		// Create a colored rectangle to represent the obstacle
 
-			obstacleImage.Fill(obstacleColor)
+		// 		obstacleImage.Fill(obstacleColor)
 
-			// Draw the obstacle image
-			screen.DrawImage(obstacleImage, obstacleOpts)
+		// 		// Draw the obstacle image
+		// 		screen.DrawImage(obstacleImage, obstacleOpts)
 
-			// Dispose of the obstacle image to avoid memory leaks if you're done with it
-			obstacleImage.Dispose()
-		}
+		// 		// Dispose of the obstacle image to avoid memory leaks if you're done with it
+		// 		obstacleImage.Dispose()
+		// 	}
 	}
 
 }
@@ -337,7 +325,7 @@ func NewGame() *Game {
 	background, Foreground := loadBackground()
 	// Create an instance of the Game struct
 	g := &Game{
-		state:          MenuState,
+		state:          PlayState,
 		menuOptions:    []string{"Start Game", "Options", "Exit"},
 		selectedOption: 0,
 		background:     background,
@@ -353,8 +341,34 @@ func NewGame() *Game {
 			Speed:        7.0,
 		},
 	}
-	g.AddObstacle(0, 0, 300, 300)
-	g.AddObstacle(2075, 432, 1850, 632)
+	// g.AddObstacle(0, 0, 300, 300)       // Debug collision box
+	g.AddObstacle(2075, 432, 1850, 604) // House Collision
+	g.AddObstacle(956, 630, 1430, 855)
+	g.AddObstacle(2340, 432, 2550, 604)
+	g.AddObstacle(540, 715, 620, 800) // Tree Collision
+	g.AddObstacle(580, 520, 660, 610)
+	g.AddObstacle(680, 950, 755, 1040)
+	g.AddObstacle(920, 430, 1000, 515)
+	g.AddObstacle(1495, 430, 1575, 515)
+	g.AddObstacle(875, 665, 955, 745)
+	g.AddObstacle(1160, 815, 1235, 900)
+	g.AddObstacle(1210, 485, 1290, 565)
+	g.AddObstacle(1680, 485, 1765, 565)
+	g.AddObstacle(1495, 435, 1575, 515)
+	g.AddObstacle(1450, 670, 1530, 750)
+	g.AddObstacle(2260, 465, 2350, 550)
+	g.AddObstacle(2555, 465, 2640, 550)
+	g.AddObstacle(815, 1240, 2410, 1295) //Land boundary Collision
+	g.AddObstacle(575, 305, 2520, 335)
+	g.AddObstacle(975, 1060, 2520, 1100) //Fence Collision
+	g.AddObstacle(1415, 930, 1895, 955)
+	g.AddObstacle(2030, 930, 2380, 955)
+	g.AddObstacle(2830, 645, 3060, 670) // Port Collisions
+	g.AddObstacle(2835, 815, 3060, 835)
+	g.AddObstacle(3060, 670, 3085, 815)
+	g.AddObstacle(2170, 705, 2300, 850) // Pond Collisions
+	// g.AddObstacle()
+	// g.AddObstacle()
 	return g
 }
 func main() {
