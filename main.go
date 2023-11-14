@@ -2,6 +2,7 @@ package main
 
 import (
 	"ebi/player"
+	"fmt"
 	"image"
 	"image/color"
 	"log"
@@ -32,6 +33,7 @@ type Game struct {
 	menuOptions     []string
 	selectedOption  int
 	keyPressCounter map[ebiten.Key]int // Tracks duration of key presses
+	obstacles       []*image.Rectangle
 }
 
 func (g *Game) Update() error {
@@ -63,12 +65,6 @@ func (g *Game) Update() error {
 				g.selectedOption = len(g.menuOptions) - 1
 			}
 		}
-		// // Navigate through menu options
-		// if ebiten.IsKeyPressed(ebiten.KeyDown) && g.selectedOption < len(g.menuOptions)-1 {
-		// 	g.selectedOption++
-		// } else if ebiten.IsKeyPressed(ebiten.KeyUp) && g.selectedOption > 0 {
-		// 	g.selectedOption--
-		// }
 
 		// Select an option
 		if ebiten.IsKeyPressed(ebiten.KeyEnter) {
@@ -83,38 +79,81 @@ func (g *Game) Update() error {
 		}
 	} else if g.state == PlayState {
 		movementKeyPressed := false
+		var moveX, moveY float64
+		// Character's central collision box (assuming the character is centered in the screen)
+		// screenWidth, screenHeight := ebiten.WindowSize()
+		// scale := 0.5 // The scale factor you mentioned
 
-		// if ebiten.IsKeyPressed(ebiten.KeyLeft) {
+		// Apply scaling to character's collision box
+		// charBox := image.Rect(
+		// 	(screenWidth/2)-(int(float64(g.player.FrameWidth)*scale)/2),
+		// 	(screenHeight/2)-(int(float64(g.player.FrameHeight)*scale)/2),
+		// 	(screenWidth/2)+(int(float64(g.player.FrameWidth)*scale)/2),
+		// 	(screenHeight/2)+(int(float64(g.player.FrameHeight)*scale)/2),
+		// )
 
-		// 	g.player.Move("left", speed)
-		// 	movementKeyPressed = true
-		// }
-		// if ebiten.IsKeyPressed(ebiten.KeyRight) {
-		// 	g.player.Move("right", speed)
-		// 	movementKeyPressed = true
-		// }
-		// if ebiten.IsKeyPressed(ebiten.KeyUp) {
-		// 	g.player.Move("up", speed)
-		// 	movementKeyPressed = true
-		// }
-		// if ebiten.IsKeyPressed(ebiten.KeyDown) {
-		// 	g.player.Move("down", speed)
-		// 	movementKeyPressed = true
-		// }
 		if ebiten.IsKeyPressed(ebiten.KeyLeft) {
-			g.player.Move("left")
+			X, Y := g.player.CheckMove("left")
+			g.player.Direction = "left"
+			moveX = X
+			moveY = Y
 			movementKeyPressed = true
 		}
 		if ebiten.IsKeyPressed(ebiten.KeyRight) {
-			g.player.Move("right")
+			X, Y := g.player.CheckMove("right")
+			g.player.Direction = "right"
+			moveX = X
+			moveY = Y
 			movementKeyPressed = true
 		}
 		if ebiten.IsKeyPressed(ebiten.KeyUp) {
-			g.player.Move("up")
+			X, Y := g.player.CheckMove("up")
+			g.player.Direction = "up"
+			moveX = X
+			moveY = Y
 			movementKeyPressed = true
 		}
 		if ebiten.IsKeyPressed(ebiten.KeyDown) {
-			g.player.Move("down")
+			X, Y := g.player.CheckMove("down")
+			g.player.Direction = "down"
+			moveX = X
+			moveY = Y
+			movementKeyPressed = true
+		}
+		if moveX != 0 {
+			fmt.Println(minX(moveX, g), minY(moveY, g))
+			fmt.Println(*g.obstacles[0])
+		}
+
+		for _, obstacle := range g.obstacles {
+			obsMinX := float64(obstacle.Min.X)
+			obsMaxX := float64(obstacle.Max.X)
+			obsMinY := float64(obstacle.Min.Y)
+			obsMaxY := float64(obstacle.Max.Y)
+			if obsMinX < minX(moveX, g) && obsMaxX > maxX(moveX, g) && obsMinY < minY(moveY, g) && obsMaxY > maxY(moveY, g) {
+				moveX = g.player.X
+				moveY = g.player.Y
+			}
+		}
+
+		// 	if moveY > float64(obstacle.Min.Y) {
+		// 		fmt.Println("Colliding")
+
+		// }
+		if ebiten.IsKeyPressed(ebiten.KeyLeft) {
+			g.player.X = moveX
+			movementKeyPressed = true
+		}
+		if ebiten.IsKeyPressed(ebiten.KeyRight) {
+			g.player.X = moveX
+			movementKeyPressed = true
+		}
+		if ebiten.IsKeyPressed(ebiten.KeyUp) {
+			g.player.Y = moveY
+			movementKeyPressed = true
+		}
+		if ebiten.IsKeyPressed(ebiten.KeyDown) {
+			g.player.Y = moveY
 			movementKeyPressed = true
 		}
 		if movementKeyPressed {
@@ -128,9 +167,25 @@ func (g *Game) Update() error {
 			g.player.TickCount = 0 // Reset the tick count
 		}
 	}
-
 	return nil
 }
+func minX(moveX float64, g *Game) float64 {
+	screenWidth, _ := ebiten.WindowSize()
+	return ((moveX - float64(screenWidth)) * -1)
+}
+func maxX(moveX float64, g *Game) float64 {
+	screenWidth, _ := ebiten.WindowSize()
+	return ((moveX - float64(screenWidth) + float64(g.player.FrameWidth)) * -1)
+}
+func minY(moveY float64, g *Game) float64 {
+	_, screenHeight := ebiten.WindowSize()
+	return ((moveY - float64(screenHeight)) * -1)
+}
+func maxY(moveY float64, g *Game) float64 {
+	_, screenHeight := ebiten.WindowSize()
+	return ((moveY - float64(screenHeight) + float64(g.player.FrameHeight)) * -1)
+}
+
 func loadFontFace() (font.Face, error) {
 	// Read the font data
 	fontBytes := fonts.MPlus1pRegular_ttf
@@ -173,10 +228,10 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			text.Draw(screen, option, fontFace, x, y+i*spacing, col)
 		}
 	} else if g.state == PlayState {
+		scale := 0.25
 		bgOpts := &ebiten.DrawImageOptions{}
 		bgOpts.GeoM.Translate(g.player.X, g.player.Y)
-		bgScale := 0.5
-		bgOpts.GeoM.Scale(bgScale, bgScale)
+		bgOpts.GeoM.Scale(scale, scale)
 		screen.DrawImage(g.background, bgOpts)
 		currentSpriteSheet := g.player.SpriteSheets[g.player.Direction]
 		// 	// Determine the x, y location of the current frame on the sprite sheet
@@ -193,18 +248,35 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			opts.GeoM.Scale(-1, 1)                               // Flip horizontally
 			opts.GeoM.Translate(float64(g.player.FrameWidth), 0) // Adjust the position after flipping
 		}
-		scale := 0.5
+
 		opts.GeoM.Scale(scale, scale)
 		//Draw Character at the center of the screen
 		screenWidth := screen.Bounds().Dx()
 		screenHeight := screen.Bounds().Dy()
 		charWidth := frame.Bounds().Dx()
 		charHeight := frame.Bounds().Dy()
-		charX := float64(screenWidth)/2 - float64(charWidth)/2
-		charY := float64(screenHeight)/2 - float64(charHeight)/2
+		charX := float64(screenWidth)/2 - float64(charWidth)/4
+		charY := float64(screenHeight)/2 - float64(charHeight)/4
 		opts.GeoM.Translate(charX, charY)
 		screen.DrawImage(frame, opts)
 		screen.DrawImage(g.Foreground, bgOpts)
+		for _, obstacle := range g.obstacles {
+			// Translate the obstacle's position based on the background position
+			obstacleOpts := &ebiten.DrawImageOptions{}
+			obstacleImage := ebiten.NewImage(obstacle.Dx(), obstacle.Dy())
+			obstacleColor := color.RGBA{255, 0, 0, 80} // Semi-transparent red color
+			obstacleOpts.GeoM.Translate(g.player.X, g.player.Y)
+			obstacleOpts.GeoM.Scale(scale, scale)
+			// Create a colored rectangle to represent the obstacle
+
+			obstacleImage.Fill(obstacleColor)
+
+			// Draw the obstacle image
+			screen.DrawImage(obstacleImage, obstacleOpts)
+
+			// Dispose of the obstacle image to avoid memory leaks if you're done with it
+			obstacleImage.Dispose()
+		}
 	}
 
 }
@@ -253,34 +325,42 @@ func loadBackground() (*ebiten.Image, *ebiten.Image) {
 	}
 	return bgImage, bgImage2
 }
-func main() {
+
+func (g *Game) AddObstacle(x1, y1, x2, y2 int) {
+	i := image.Rect(x1, y1, x2, y2)
+	g.obstacles = append(g.obstacles, &i)
+}
+
+func NewGame() *Game {
 	// Load the sprite sheet
 	spriteSheets := loadSpriteSheets()
 	background, Foreground := loadBackground()
 	// Create an instance of the Game struct
-	game := &Game{
+	g := &Game{
 		state:          MenuState,
 		menuOptions:    []string{"Start Game", "Options", "Exit"},
 		selectedOption: 0,
 		background:     background,
 		Foreground:     Foreground,
 		player: &player.Player{
-			X:            -500,
-			Y:            -500,
+			X:            0,
+			Y:            0,
 			FrameWidth:   192 / 4, // The width of a single frame
 			FrameHeight:  68,      // The height of a single frame
-			FrameCount:   4,       // The total number of frames in the sprite sheet // Default direction
+			FrameCount:   4,       // The total number of frames in the sprite sheet
 			SpriteSheets: spriteSheets,
-			Direction:    "down",
+			Direction:    "down", // Default direction
+			Speed:        7.0,
 		},
-		// spriteSheets:   spriteSheets,
-		// FrameWidth:     192 / 4, // The width of a single frame
-		// FrameHeight:    68,      // The height of a single frame
-		// FrameCount:     4,       // The total number of frames in the sprite sheet // Default direction
 	}
-
+	g.AddObstacle(0, 0, 300, 300)
+	g.AddObstacle(2075, 432, 1850, 632)
+	return g
+}
+func main() {
+	game := NewGame()
 	// Configuration settings
-	ebiten.SetWindowSize(640*2, 480*2)
+	ebiten.SetWindowSize(640, 480)
 	ebiten.SetWindowTitle("Sprite Animation")
 
 	// Start the game

@@ -11,25 +11,21 @@ type Player struct {
 	X, Y         float64
 	SpriteSheets map[string]*ebiten.Image // Map of sprite sheets for each direction
 	Direction    string
+	Speed        float64
 }
 
-func (p *Player) Move(dir string) {
-	speed := 7.0
-	p.Direction = dir
+func (p Player) CheckMove(dir string) (float64, float64) {
 
 	switch dir {
 	case "left":
-		p.X += speed // Move left
+		p.X += p.Speed // Move left
 	case "right":
-		p.X -= speed // Move right
+		p.X -= p.Speed // Move right
 	case "up":
-		p.Y += speed // Move up
+		p.Y += p.Speed // Move up
 	case "down":
-		p.Y -= speed // Move down
+		p.Y -= p.Speed // Move down
 	}
+	return p.X, p.Y
 
-}
-
-func (p *Player) GetDirection() string {
-	return p.Direction
 }
