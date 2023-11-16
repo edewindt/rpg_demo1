@@ -22,30 +22,37 @@ const (
 	MenuState GameState = iota
 	PlayState
 	OptionsState
+	TransitionState
+	NewSceneState
 )
 
 type Door struct {
 	Rect        *image.Rectangle
 	Id          string
 	Destination *Scene
+	NewX, NewY  float64
 }
 
 type Scene struct {
-	obstacles  []*image.Rectangle
-	doors      []*Door
-	background *ebiten.Image
-	Foreground *ebiten.Image
+	Game                   *Game
+	obstacles              []*image.Rectangle
+	doors                  []*Door
+	background, Foreground *ebiten.Image
+	loadObsnDoors          func(*Game)
 }
 
 type Game struct {
-	player               *player.Player
-	state                GameState
-	menuOptions          []string
-	Scenes               []*Scene
-	CurrentScene         *Scene
-	selectedOption       int
-	keyPressCounter      map[ebiten.Key]int // Tracks duration of key presses
-	keyKPressedLastFrame bool
+	player                  *player.Player
+	state                   GameState
+	alpha                   float64 // For the fade effect (0.0: fully transparent, 1.0: fully opaque)
+	fadeSpeed               float64 // How fast the fade occurs
+	menuOptions             []string
+	Scenes                  []*Scene
+	CurrentScene, NextScene *Scene
+	CurrentDoor             *Door
+	selectedOption          int
+	keyPressCounter         map[ebiten.Key]int // Tracks duration of key presses
+	keyKPressedLastFrame    bool
 }
 
 func (g *Game) Update() error {
@@ -145,7 +152,8 @@ func (g *Game) Update() error {
 			obsMaxY := float64(door.Rect.Max.Y)
 			if obsMinX < minX(moveX, g) && obsMaxX > maxX(moveX, g) && obsMinY < minY(moveY, g) && obsMaxY > maxY(moveY, g) {
 				if colliding {
-					g.changeScene(g.CurrentScene, door.Destination)
+					g.state = TransitionState
+					g.CurrentDoor = door
 				}
 			}
 		}
@@ -195,6 +203,25 @@ func (g *Game) Update() error {
 		if g.player.TickCount >= 10 {
 			g.player.CurrentFrame = (g.player.CurrentFrame + 1) % g.player.FrameCount
 			g.player.TickCount = 0 // Reset the tick count
+		}
+	} else if g.state == TransitionState {
+		// Increase the alpha for the fade out effect
+		g.alpha += g.fadeSpeed
+		if g.alpha >= 1.0 {
+			g.alpha = 1.0
+			g.state = NewSceneState
+			g.changeScene(g.CurrentScene, g.CurrentDoor.Destination)
+			g.player.X = g.CurrentDoor.NewX
+			g.player.Y = g.CurrentDoor.NewY
+			g.CurrentScene.loadObsnDoors(g)
+		}
+	} else if g.state == NewSceneState {
+		// Decrease the alpha for the fade in effect
+		g.alpha -= g.fadeSpeed
+		if g.alpha <= 0.0 {
+			g.alpha = 0.0
+			g.state = PlayState
+			// The new scene is fully visible now, and game continues as normal
 		}
 	}
 	return nil
@@ -290,23 +317,45 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		opts.GeoM.Translate(charX, charY)
 		screen.DrawImage(frame, opts)
 		screen.DrawImage(g.CurrentScene.Foreground, bgOpts)
-		// 	for _, obstacle := range g.obstacles {
-		// 		// Translate the obstacle's position based on the background position
-		// 		obstacleOpts := &ebiten.DrawImageOptions{}
-		// 		obstacleImage := ebiten.NewImage(obstacle.Dx(), obstacle.Dy())
-		// 		obstacleColor := color.RGBA{255, 0, 0, 80} // Semi-transparent red color
-		// 		obstacleOpts.GeoM.Translate(g.player.X, g.player.Y)
-		// 		obstacleOpts.GeoM.Scale(scale, scale)
-		// 		// Create a colored rectangle to represent the obstacle
 
-		// 		obstacleImage.Fill(obstacleColor)
+	} else if g.state == TransitionState || g.state == NewSceneState {
+		scale := 0.25
+		bgOpts := &ebiten.DrawImageOptions{}
+		bgOpts.GeoM.Translate(g.player.X, g.player.Y)
+		bgOpts.GeoM.Scale(scale, scale)
+		screen.DrawImage(g.CurrentScene.background, bgOpts)
+		currentSpriteSheet := g.player.SpriteSheets[g.player.Direction]
+		// 	// Determine the x, y location of the current frame on the sprite sheet
+		sx := (g.player.CurrentFrame % (currentSpriteSheet.Bounds().Dx() / g.player.FrameWidth)) * g.player.FrameWidth
+		sy := (g.player.CurrentFrame / (currentSpriteSheet.Bounds().Dx() / g.player.FrameWidth)) * g.player.FrameHeight
 
-		// 		// Draw the obstacle image
-		// 		screen.DrawImage(obstacleImage, obstacleOpts)
+		// 	// Create a sub-image that represents the current frame
+		frame := currentSpriteSheet.SubImage(image.Rect(sx, sy, sx+g.player.FrameWidth, sy+g.player.FrameHeight)).(*ebiten.Image)
 
-		// 		// Dispose of the obstacle image to avoid memory leaks if you're done with it
-		// 		obstacleImage.Dispose()
-		// 	}
+		// Draw the sub-image on the screen
+		opts := &ebiten.DrawImageOptions{}
+		// If the direction is left, flip the image on the vertical axis
+		if g.player.Direction == "left" {
+			opts.GeoM.Scale(-1, 1)                               // Flip horizontally
+			opts.GeoM.Translate(float64(g.player.FrameWidth), 0) // Adjust the position after flipping
+		}
+
+		opts.GeoM.Scale(scale, scale)
+		//Draw Character at the center of the screen
+		screenWidth := screen.Bounds().Dx()
+		screenHeight := screen.Bounds().Dy()
+		charWidth := frame.Bounds().Dx()
+		charHeight := frame.Bounds().Dy()
+		charX := float64(screenWidth)/2 - float64(charWidth)/4
+		charY := float64(screenHeight)/2 - float64(charHeight)/4
+		opts.GeoM.Translate(charX, charY)
+		screen.DrawImage(frame, opts)
+		screen.DrawImage(g.CurrentScene.Foreground, bgOpts)
+		// Draw the fade rectangle
+		fadeImage := ebiten.NewImage(screen.Bounds().Dx(), screen.Bounds().Dy())
+		fadeColor := color.RGBA{0, 0, 0, uint8(g.alpha * 0xff)} // Black with variable alpha
+		fadeImage.Fill(fadeColor)
+		screen.DrawImage(fadeImage, nil)
 	}
 
 }
@@ -361,27 +410,32 @@ func (g *Game) AddObstacle(x1, y1, x2, y2 int) {
 	i := image.Rect(x1, y1, x2, y2)
 	g.CurrentScene.obstacles = append(g.CurrentScene.obstacles, &i)
 }
-func (g *Game) AddDoor(x1, y1, x2, y2 int, dest *Scene, id string) {
+func (g *Game) AddDoor(x1, y1, x2, y2 int, dest *Scene, id string, newX, newY float64) {
 	i := image.Rect(x1, y1, x2, y2)
 	d := &Door{
 		Rect:        &i,
 		Id:          id,
 		Destination: dest,
+		NewX:        newX,
+		NewY:        newY,
 	}
 	g.CurrentScene.doors = append(g.CurrentScene.doors, d)
 }
 
-func newScene(foreground *ebiten.Image, background *ebiten.Image) *Scene {
+func newScene(foreground *ebiten.Image, background *ebiten.Image, fn func(*Game)) *Scene {
 	return &Scene{
-		Foreground: foreground,
-		background: background,
+		Foreground:    foreground,
+		background:    background,
+		loadObsnDoors: fn,
 	}
 }
 func (g *Game) loadScenes() {
 	bg1, fg1 := loadBackground("assets/mainMap.png", "assets/over.png")
 	bg2, fg2 := loadBackground("assets/mainMapRed.png", "assets/overRed.png")
-	mainScene := newScene(bg1, fg1)
-	secondScene := newScene(bg2, fg2)
+	mainScene := newScene(bg1, fg1, loadObsnDoorss)
+	secondScene := newScene(bg2, fg2, loadObsnDoors2)
+	mainScene.Game = g
+	secondScene.Game = g
 	g.Scenes = append(g.Scenes, mainScene)
 	g.Scenes = append(g.Scenes, secondScene)
 	g.CurrentScene = mainScene
@@ -390,7 +444,74 @@ func (g *Game) loadScenes() {
 func (g *Game) changeScene(from *Scene, to *Scene) {
 	g.CurrentScene = to
 }
+func loadObsnDoorss(g *Game) {
+	if len(g.CurrentScene.obstacles) == 0 {
+		g.AddObstacle(2075, 432, 1850, 604) // House Collision
+		g.AddObstacle(956, 630, 1430, 855)
+		g.AddObstacle(2340, 432, 2550, 604)
+		g.AddObstacle(540, 715, 620, 800) // Tree Collision
+		g.AddObstacle(580, 520, 660, 610)
+		g.AddObstacle(680, 950, 755, 1040)
+		g.AddObstacle(920, 430, 1000, 515)
+		g.AddObstacle(1495, 430, 1575, 515)
+		g.AddObstacle(875, 665, 955, 745)
+		g.AddObstacle(1160, 815, 1235, 900)
+		g.AddObstacle(1210, 485, 1290, 565)
+		g.AddObstacle(1680, 485, 1765, 565)
+		g.AddObstacle(1495, 435, 1575, 515)
+		g.AddObstacle(1450, 670, 1530, 750)
+		g.AddObstacle(2260, 465, 2350, 550)
+		g.AddObstacle(2555, 465, 2640, 550)
+		g.AddObstacle(815, 1240, 2410, 1295) //Land boundary Collision
+		g.AddObstacle(575, 305, 2520, 335)
+		g.AddObstacle(975, 1060, 2520, 1100) //Fence Collision
+		g.AddObstacle(1415, 930, 1895, 955)
+		g.AddObstacle(2030, 930, 2380, 955)
+		g.AddObstacle(2830, 645, 3060, 670) // Port Collisions
+		g.AddObstacle(2835, 815, 3060, 835)
+		g.AddObstacle(3060, 670, 3085, 815)
+		g.AddObstacle(2170, 705, 2300, 850)                            // Pond Collisions
+		g.AddDoor(1000, 840, 1095, 945, g.Scenes[1], "fd", -500, -500) // Door Collisions
+		g.AddDoor(1290, 840, 1390, 945, g.Scenes[1], "sd", -1000, -1000)
+		g.AddDoor(1915, 600, 2015, 710, g.Scenes[1], "td", -1500, -1500)
+		g.AddDoor(2400, 600, 2495, 710, g.Scenes[1], "ffd", -700, -700)
+	}
 
+}
+func loadObsnDoors2(g *Game) {
+	if len(g.CurrentScene.obstacles) == 0 {
+		g.AddObstacle(2075, 432, 1850, 604) // House Collision
+		g.AddObstacle(956, 630, 1430, 855)
+		g.AddObstacle(2340, 432, 2550, 604)
+		g.AddObstacle(540, 715, 620, 800) // Tree Collision
+		g.AddObstacle(580, 520, 660, 610)
+		g.AddObstacle(680, 950, 755, 1040)
+		g.AddObstacle(920, 430, 1000, 515)
+		g.AddObstacle(1495, 430, 1575, 515)
+		g.AddObstacle(875, 665, 955, 745)
+		g.AddObstacle(1160, 815, 1235, 900)
+		g.AddObstacle(1210, 485, 1290, 565)
+		g.AddObstacle(1680, 485, 1765, 565)
+		g.AddObstacle(1495, 435, 1575, 515)
+		g.AddObstacle(1450, 670, 1530, 750)
+		g.AddObstacle(2260, 465, 2350, 550)
+		g.AddObstacle(2555, 465, 2640, 550)
+		g.AddObstacle(815, 1240, 2410, 1295) //Land boundary Collision
+		g.AddObstacle(575, 305, 2520, 335)
+		g.AddObstacle(975, 1060, 2520, 1100) //Fence Collision
+		g.AddObstacle(1415, 930, 1895, 955)
+		g.AddObstacle(2030, 930, 2380, 955)
+		g.AddObstacle(2830, 645, 3060, 670) // Port Collisions
+		g.AddObstacle(2835, 815, 3060, 835)
+		g.AddObstacle(3060, 670, 3085, 815)
+		g.AddObstacle(2170, 705, 2300, 850)                            // Pond Collisions
+		g.AddDoor(1000, 840, 1095, 945, g.Scenes[0], "fd", -500, -500) // Door Collisions
+		g.AddDoor(1290, 840, 1390, 945, g.Scenes[0], "sd", -1000, -1000)
+		g.AddDoor(1915, 600, 2015, 710, g.Scenes[0], "td", -1500, -1500)
+		g.AddDoor(2400, 600, 2495, 710, g.Scenes[0], "ffd", -700, -700)
+	}
+
+}
 func NewGame() *Game {
 	// Load the sprite sheet
 	spriteSheets := loadSpriteSheets()
@@ -399,6 +520,8 @@ func NewGame() *Game {
 		state:          PlayState,
 		menuOptions:    []string{"Start Game", "Options", "Exit"},
 		selectedOption: 0,
+		alpha:          0.0,
+		fadeSpeed:      0.05,
 		player: &player.Player{
 			X:            0,
 			Y:            0,
@@ -411,36 +534,9 @@ func NewGame() *Game {
 		},
 	}
 	g.loadScenes()
+	g.CurrentScene.loadObsnDoors(g)
 	// g.AddObstacle(0, 0, 300, 300)       // Debug collision box
-	g.AddObstacle(2075, 432, 1850, 604) // House Collision
-	g.AddObstacle(956, 630, 1430, 855)
-	g.AddObstacle(2340, 432, 2550, 604)
-	g.AddObstacle(540, 715, 620, 800) // Tree Collision
-	g.AddObstacle(580, 520, 660, 610)
-	g.AddObstacle(680, 950, 755, 1040)
-	g.AddObstacle(920, 430, 1000, 515)
-	g.AddObstacle(1495, 430, 1575, 515)
-	g.AddObstacle(875, 665, 955, 745)
-	g.AddObstacle(1160, 815, 1235, 900)
-	g.AddObstacle(1210, 485, 1290, 565)
-	g.AddObstacle(1680, 485, 1765, 565)
-	g.AddObstacle(1495, 435, 1575, 515)
-	g.AddObstacle(1450, 670, 1530, 750)
-	g.AddObstacle(2260, 465, 2350, 550)
-	g.AddObstacle(2555, 465, 2640, 550)
-	g.AddObstacle(815, 1240, 2410, 1295) //Land boundary Collision
-	g.AddObstacle(575, 305, 2520, 335)
-	g.AddObstacle(975, 1060, 2520, 1100) //Fence Collision
-	g.AddObstacle(1415, 930, 1895, 955)
-	g.AddObstacle(2030, 930, 2380, 955)
-	g.AddObstacle(2830, 645, 3060, 670) // Port Collisions
-	g.AddObstacle(2835, 815, 3060, 835)
-	g.AddObstacle(3060, 670, 3085, 815)
-	g.AddObstacle(2170, 705, 2300, 850) // Pond Collisions
-	g.AddDoor(1000, 840, 1095, 945, g.Scenes[1], "fd")
-	g.AddDoor(1290, 840, 1390, 945, g.Scenes[1], "sd")
-	g.AddDoor(1915, 600, 2015, 710, g.Scenes[1], "td")
-	g.AddDoor(2400, 600, 2495, 710, g.Scenes[1], "ffd")
+
 	// g.AddObstacle()
 	// g.AddObstacle()
 	return g
