@@ -24,15 +24,28 @@ const (
 	OptionsState
 )
 
+type Door struct {
+	Rect        *image.Rectangle
+	Id          string
+	Destination *Scene
+}
+
+type Scene struct {
+	obstacles  []*image.Rectangle
+	doors      []*Door
+	background *ebiten.Image
+	Foreground *ebiten.Image
+}
+
 type Game struct {
-	player          *player.Player
-	background      *ebiten.Image
-	Foreground      *ebiten.Image
-	state           GameState
-	menuOptions     []string
-	selectedOption  int
-	keyPressCounter map[ebiten.Key]int // Tracks duration of key presses
-	obstacles       []*image.Rectangle
+	player               *player.Player
+	state                GameState
+	menuOptions          []string
+	Scenes               []*Scene
+	CurrentScene         *Scene
+	selectedOption       int
+	keyPressCounter      map[ebiten.Key]int // Tracks duration of key presses
+	keyKPressedLastFrame bool
 }
 
 func (g *Game) Update() error {
@@ -77,6 +90,7 @@ func (g *Game) Update() error {
 			}
 		}
 	} else if g.state == PlayState {
+		colliding := false
 		movementKeyPressed := false
 		var moveX, moveY float64
 
@@ -113,7 +127,7 @@ func (g *Game) Update() error {
 		// 	fmt.Println(*g.obstacles[0])
 		// }
 
-		for _, obstacle := range g.obstacles {
+		for _, obstacle := range g.CurrentScene.obstacles {
 			obsMinX := float64(obstacle.Min.X)
 			obsMaxX := float64(obstacle.Max.X)
 			obsMinY := float64(obstacle.Min.Y)
@@ -121,6 +135,18 @@ func (g *Game) Update() error {
 			if obsMinX < minX(moveX, g) && obsMaxX > maxX(moveX, g) && obsMinY < minY(moveY, g) && obsMaxY > maxY(moveY, g) {
 				moveX = g.player.X
 				moveY = g.player.Y
+				colliding = true
+			}
+		}
+		for _, door := range g.CurrentScene.doors {
+			obsMinX := float64(door.Rect.Min.X)
+			obsMaxX := float64(door.Rect.Max.X)
+			obsMinY := float64(door.Rect.Min.Y)
+			obsMaxY := float64(door.Rect.Max.Y)
+			if obsMinX < minX(moveX, g) && obsMaxX > maxX(moveX, g) && obsMinY < minY(moveY, g) && obsMaxY > maxY(moveY, g) {
+				if colliding {
+					g.changeScene(g.CurrentScene, door.Destination)
+				}
 			}
 		}
 
@@ -128,6 +154,22 @@ func (g *Game) Update() error {
 		// 		fmt.Println("Colliding")
 
 		// }
+
+		// if ebiten.IsKeyPressed(key) {
+		// 	g.keyPressCounter[key]++
+		// } else {
+		// 	g.keyPressCounter[key] = 0
+		// }
+
+		if ebiten.IsKeyPressed(ebiten.KeyK) && !g.keyKPressedLastFrame {
+			if g.CurrentScene == g.Scenes[0] {
+				g.changeScene(g.Scenes[0], g.Scenes[1])
+			} else {
+				g.changeScene(g.Scenes[1], g.Scenes[0])
+			}
+
+		}
+		g.keyKPressedLastFrame = ebiten.IsKeyPressed(ebiten.KeyK)
 		if ebiten.IsKeyPressed(ebiten.KeyLeft) {
 			g.player.X = moveX
 			movementKeyPressed = true
@@ -220,7 +262,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		bgOpts := &ebiten.DrawImageOptions{}
 		bgOpts.GeoM.Translate(g.player.X, g.player.Y)
 		bgOpts.GeoM.Scale(scale, scale)
-		screen.DrawImage(g.background, bgOpts)
+		screen.DrawImage(g.CurrentScene.background, bgOpts)
 		currentSpriteSheet := g.player.SpriteSheets[g.player.Direction]
 		// 	// Determine the x, y location of the current frame on the sprite sheet
 		sx := (g.player.CurrentFrame % (currentSpriteSheet.Bounds().Dx() / g.player.FrameWidth)) * g.player.FrameWidth
@@ -247,7 +289,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		charY := float64(screenHeight)/2 - float64(charHeight)/4
 		opts.GeoM.Translate(charX, charY)
 		screen.DrawImage(frame, opts)
-		screen.DrawImage(g.Foreground, bgOpts)
+		screen.DrawImage(g.CurrentScene.Foreground, bgOpts)
 		// 	for _, obstacle := range g.obstacles {
 		// 		// Translate the obstacle's position based on the background position
 		// 		obstacleOpts := &ebiten.DrawImageOptions{}
@@ -302,12 +344,13 @@ func loadSpriteSheets() map[string]*ebiten.Image {
 
 	return spriteSheets
 }
-func loadBackground() (*ebiten.Image, *ebiten.Image) {
-	bgImage, _, err := ebitenutil.NewImageFromFile("assets/myMap.png")
+
+func loadBackground(foregroundPath, backgroundPath string) (*ebiten.Image, *ebiten.Image) {
+	bgImage, _, err := ebitenutil.NewImageFromFile(backgroundPath)
 	if err != nil {
 		log.Fatal(err)
 	}
-	bgImage2, _, err := ebitenutil.NewImageFromFile("assets/over.png")
+	bgImage2, _, err := ebitenutil.NewImageFromFile(foregroundPath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -316,20 +359,46 @@ func loadBackground() (*ebiten.Image, *ebiten.Image) {
 
 func (g *Game) AddObstacle(x1, y1, x2, y2 int) {
 	i := image.Rect(x1, y1, x2, y2)
-	g.obstacles = append(g.obstacles, &i)
+	g.CurrentScene.obstacles = append(g.CurrentScene.obstacles, &i)
+}
+func (g *Game) AddDoor(x1, y1, x2, y2 int, dest *Scene, id string) {
+	i := image.Rect(x1, y1, x2, y2)
+	d := &Door{
+		Rect:        &i,
+		Id:          id,
+		Destination: dest,
+	}
+	g.CurrentScene.doors = append(g.CurrentScene.doors, d)
+}
+
+func newScene(foreground *ebiten.Image, background *ebiten.Image) *Scene {
+	return &Scene{
+		Foreground: foreground,
+		background: background,
+	}
+}
+func (g *Game) loadScenes() {
+	bg1, fg1 := loadBackground("assets/mainMap.png", "assets/over.png")
+	bg2, fg2 := loadBackground("assets/mainMapRed.png", "assets/overRed.png")
+	mainScene := newScene(bg1, fg1)
+	secondScene := newScene(bg2, fg2)
+	g.Scenes = append(g.Scenes, mainScene)
+	g.Scenes = append(g.Scenes, secondScene)
+	g.CurrentScene = mainScene
+}
+
+func (g *Game) changeScene(from *Scene, to *Scene) {
+	g.CurrentScene = to
 }
 
 func NewGame() *Game {
 	// Load the sprite sheet
 	spriteSheets := loadSpriteSheets()
-	background, Foreground := loadBackground()
 	// Create an instance of the Game struct
 	g := &Game{
 		state:          PlayState,
 		menuOptions:    []string{"Start Game", "Options", "Exit"},
 		selectedOption: 0,
-		background:     background,
-		Foreground:     Foreground,
 		player: &player.Player{
 			X:            0,
 			Y:            0,
@@ -341,6 +410,7 @@ func NewGame() *Game {
 			Speed:        7.0,
 		},
 	}
+	g.loadScenes()
 	// g.AddObstacle(0, 0, 300, 300)       // Debug collision box
 	g.AddObstacle(2075, 432, 1850, 604) // House Collision
 	g.AddObstacle(956, 630, 1430, 855)
@@ -367,6 +437,10 @@ func NewGame() *Game {
 	g.AddObstacle(2835, 815, 3060, 835)
 	g.AddObstacle(3060, 670, 3085, 815)
 	g.AddObstacle(2170, 705, 2300, 850) // Pond Collisions
+	g.AddDoor(1000, 840, 1095, 945, g.Scenes[1], "fd")
+	g.AddDoor(1290, 840, 1390, 945, g.Scenes[1], "sd")
+	g.AddDoor(1915, 600, 2015, 710, g.Scenes[1], "td")
+	g.AddDoor(2400, 600, 2495, 710, g.Scenes[1], "ffd")
 	// g.AddObstacle()
 	// g.AddObstacle()
 	return g
