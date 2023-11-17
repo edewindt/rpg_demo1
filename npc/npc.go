@@ -1,6 +1,7 @@
 package npc
 
 import (
+	"fmt"
 	"image"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -51,9 +52,6 @@ func (npc *NPC) Update(interactionKey ebiten.Key) {
 	if ebiten.IsKeyPressed(interactionKey) {
 		if npc.InteractionState == PlayerInteracted {
 			npc.InteractionState = WaitingForPlayerToResume
-		} else if npc.InteractionState == WaitingForPlayerToResume {
-			// Allow the NPC to move again
-			npc.InteractionState = NoInteraction
 		}
 	}
 
@@ -87,6 +85,7 @@ func (npc *NPC) Update(interactionKey ebiten.Key) {
 		}
 	} else {
 		// NPC is stopped and waiting for player to resume
+		fmt.Println("Reached")
 	}
 }
 

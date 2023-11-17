@@ -166,6 +166,7 @@ func (g *Game) Update() error {
 			}
 		}
 		// Check for proximity and key press to interact with the NPC
+
 		for _, cnpc := range g.CurrentScene.NPCs {
 			if nearNPC(minX(g.player.X, g), minY(g.player.Y, g), cnpc.X, cnpc.Y) {
 				if ebiten.IsKeyPressed(ebiten.KeyZ) && !g.keyZPressedLastFrame {
@@ -257,6 +258,10 @@ func (g *Game) Update() error {
 	return nil
 }
 func nearNPC(playerX, playerY, npcX, npcY float64) bool {
+	npcX *= -1
+	npcY *= -1
+	npcX += 192 / 4
+	npcY += 68
 	// Define what "near" means, e.g., within 50 pixels
 	const proximityThreshold = 50.0
 	return math.Abs(playerX-npcX) < proximityThreshold && math.Abs(playerY-npcY) < proximityThreshold
@@ -461,8 +466,8 @@ func (g *Game) AddDoor(x1, y1, x2, y2 int, dest *Scene, id string, newX, newY fl
 }
 func (g *Game) AddNPC(spriteSheets map[string]*ebiten.Image) {
 	n := &npc.NPC{
-		X:                -1000,
-		Y:                -1000,
+		X:                -900,
+		Y:                -950,
 		FrameWidth:       192 / 4, // The width of a single frame
 		FrameHeight:      68,      // The height of a single frame
 		FrameCount:       4,       // The total number of frames in the sprite sheet
@@ -554,8 +559,8 @@ func loadObsnDoorss(g *Game) {
 		g.AddObstacle(2830, 645, 3060, 670) // Port Collisions
 		g.AddObstacle(2835, 815, 3060, 835)
 		g.AddObstacle(3060, 670, 3085, 815)
-		g.AddObstacle(2170, 705, 2300, 850)                            // Pond Collisions
-		g.AddDoor(1000, 840, 1095, 945, g.Scenes[1], "fd", -500, -500) // Door Collisions
+		g.AddObstacle(2170, 705, 2300, 850)                          // Pond Collisions
+		g.AddDoor(1000, 840, 1095, 945, g.Scenes[1], "fd", -140, 20) // Door Collisions
 		g.AddDoor(1290, 840, 1390, 945, g.Scenes[1], "sd", -1000, -1000)
 		g.AddDoor(1915, 600, 2015, 710, g.Scenes[1], "td", -1500, -1500)
 		g.AddDoor(2400, 600, 2495, 710, g.Scenes[1], "ffd", -700, -700)
