@@ -3,6 +3,7 @@ package main
 import (
 	"ebi/npc"
 	"ebi/player"
+	"fmt"
 	"image"
 	"image/color"
 	"log"
@@ -45,6 +46,16 @@ type Scene struct {
 	NPCs                   []*npc.NPC
 }
 
+type Dialogue struct {
+	TextLines         []string
+	CurrentLine       int
+	CharIndex         int
+	FramesPerChar     int // Number of frames to wait before showing the next character
+	AccumulatedFrames int // Frame counter for the typewriter effect
+	IsOpen            bool
+	Finished          bool
+}
+
 type Game struct {
 	player                  *player.Player
 	state                   GameState
@@ -58,6 +69,7 @@ type Game struct {
 	keyPressCounter         map[ebiten.Key]int // Tracks duration of key presses
 	keyKPressedLastFrame    bool
 	keyZPressedLastFrame    bool
+	dialogue                *Dialogue
 }
 
 func (g *Game) Update() error {
@@ -181,21 +193,22 @@ func (g *Game) Update() error {
 				}
 			}
 			cnpc.Update(ebiten.KeyZ)
+			if ebiten.IsKeyPressed(ebiten.KeyZ) && !g.keyZPressedLastFrame {
+				fmt.Println("Reached")
+				if g.dialogue.Finished {
+					g.dialogue.NextLine()
+				} else {
+					// Instantly display all characters in the current line
+					g.dialogue.CharIndex = len(g.dialogue.TextLines[g.dialogue.CurrentLine])
+					g.dialogue.Finished = true
+				}
+			}
+
+			g.dialogue.Update()
 
 		}
+
 		g.keyZPressedLastFrame = ebiten.IsKeyPressed(ebiten.KeyZ)
-		// Update NPC
-
-		// 	if moveY > float64(obstacle.Min.Y) {
-		// 		fmt.Println("Colliding")
-
-		// }
-
-		// if ebiten.IsKeyPressed(key) {
-		// 	g.keyPressCounter[key]++
-		// } else {
-		// 	g.keyPressCounter[key] = 0
-		// }
 
 		if ebiten.IsKeyPressed(ebiten.KeyK) && !g.keyKPressedLastFrame {
 			if g.CurrentScene == g.Scenes[0] {
@@ -307,6 +320,57 @@ func loadFontFace() (font.Face, error) {
 	return face, nil
 }
 
+func (d *Dialogue) Update() {
+	if !d.IsOpen || d.Finished {
+		return
+	}
+
+	d.AccumulatedFrames++
+	if d.AccumulatedFrames >= d.FramesPerChar {
+		d.AccumulatedFrames = 0
+		d.CharIndex++
+		if d.CharIndex > len(d.TextLines[d.CurrentLine]) {
+			d.CharIndex = len(d.TextLines[d.CurrentLine])
+			d.Finished = true
+		}
+	}
+}
+
+func (d *Dialogue) NextLine() {
+	if d.CurrentLine < len(d.TextLines)-1 {
+		d.CurrentLine++
+		d.CharIndex = 0
+		d.Finished = false
+	} else {
+		// No more lines, close the dialogue
+		d.IsOpen = false
+	}
+}
+func (d *Dialogue) Draw(screen *ebiten.Image) {
+	if !d.IsOpen {
+		return
+	}
+
+	// Set up the dialogue box dimensions
+	boxWidth := screen.Bounds().Dx() - 20         // 20 pixels padding on each side
+	boxHeight := 60                               // Fixed height for the dialogue box
+	boxX := 10                                    // X position of the box
+	boxY := screen.Bounds().Dy() - boxHeight - 10 // Y position of the box, 20 pixels above the bottom of the screen
+
+	// Draw the dialogue box background
+	dialogueBox := ebiten.NewImage(boxWidth, boxHeight)
+	dialogueBox.Fill(color.Black)
+	opts := &ebiten.DrawImageOptions{}
+	opts.GeoM.Translate(float64(boxX), float64(boxY))
+	screen.DrawImage(dialogueBox, opts)
+	fontFace, err := loadFontFace()
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Draw the text with the typewriter effect
+	textToDisplay := d.TextLines[d.CurrentLine][:d.CharIndex]
+	text.Draw(screen, textToDisplay, fontFace, boxX+10, boxY+30, color.White) // +10 for text padding, +30 to vertically center
+}
 func (g *Game) Draw(screen *ebiten.Image) {
 	if g.state == MenuState {
 		fontFace, err := loadFontFace()
@@ -360,6 +424,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		}
 		screen.DrawImage(frame, opts)
 		screen.DrawImage(g.CurrentScene.Foreground, bgOpts)
+		g.dialogue.Draw(screen)
 
 	} else if g.state == TransitionState || g.state == NewSceneState {
 		scale := 0.25
@@ -394,6 +459,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		opts.GeoM.Translate(charX, charY)
 		screen.DrawImage(frame, opts)
 		screen.DrawImage(g.CurrentScene.Foreground, bgOpts)
+
 		// Draw the fade rectangle
 		fadeImage := ebiten.NewImage(screen.Bounds().Dx(), screen.Bounds().Dy())
 		fadeColor := color.RGBA{0, 0, 0, uint8(g.alpha * 0xff)} // Black with variable alpha
@@ -606,7 +672,7 @@ func NewGame() *Game {
 	spriteSheets := loadSpriteSheets()
 	// Create an instance of the Game struct
 	g := &Game{
-		state:          PlayState,
+		state:          MenuState,
 		menuOptions:    []string{"Start Game", "Options", "Exit"},
 		selectedOption: 0,
 		alpha:          0.0,
@@ -626,11 +692,23 @@ func NewGame() *Game {
 	g.loadScenes()
 	g.CurrentScene.loadObsnDoors(g)
 	g.CurrentScene.loadNPCs(g)
+	g.dialogue = newDialogue()
 	// g.AddObstacle(0, 0, 300, 300)       // Debug collision box
 
 	// g.AddObstacle()
 	// g.AddObstacle()
 	return g
+}
+func newDialogue() *Dialogue {
+	d := &Dialogue{
+		TextLines:     []string{"This is the first line of dialogue.", "This is the second line."},
+		FramesPerChar: 2, // For example, one character every 2 frames
+		IsOpen:        true,
+		CurrentLine:   0,
+		CharIndex:     0,
+	}
+	return d
+
 }
 func main() {
 	game := NewGame()

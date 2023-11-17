@@ -1,7 +1,6 @@
 package npc
 
 import (
-	"fmt"
 	"image"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -83,9 +82,6 @@ func (npc *NPC) Update(interactionKey ebiten.Key) {
 
 			}
 		}
-	} else {
-		// NPC is stopped and waiting for player to resume
-		fmt.Println("Reached")
 	}
 }
 
