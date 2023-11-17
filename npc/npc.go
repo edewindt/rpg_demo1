@@ -31,6 +31,21 @@ type NPC struct {
 	InteractionState InteractionState
 }
 
+func (npc *NPC) Move(dir string) {
+
+	switch dir {
+	case "left":
+		npc.X += npc.Speed // Move left
+	case "right":
+		npc.X -= npc.Speed // Move right
+	case "up":
+		npc.Y += npc.Speed // Move up
+	case "down":
+		npc.Y -= npc.Speed // Move down
+	}
+
+}
+
 func (npc *NPC) Update(interactionKey ebiten.Key) {
 	// Check for interaction key press to change the NPC's state
 	if ebiten.IsKeyPressed(interactionKey) {
@@ -44,7 +59,32 @@ func (npc *NPC) Update(interactionKey ebiten.Key) {
 
 	// NPC movement logic
 	if npc.InteractionState == NoInteraction {
-		// NPC moves normally
+		if npc.IsStopped {
+			// NPC is stopped, so we might count down the stop timer
+			npc.StopTimer--
+			if npc.StopTimer <= 0 {
+				// Time to move again
+				npc.IsStopped = false
+				// Reset the move timer to some value
+				npc.MoveTimer = 60
+				// Change direction
+				if npc.Direction == "right" {
+					npc.Direction = "left"
+				} else {
+					npc.Direction = "right"
+				}
+			}
+		} else {
+			npc.MoveTimer--
+			npc.Move(npc.Direction)
+			if npc.MoveTimer <= 0 {
+				// Time to stop
+				npc.IsStopped = true
+				// Reset the stop timer to the duration of the stop
+				npc.StopTimer = npc.StopDuration
+
+			}
+		}
 	} else {
 		// NPC is stopped and waiting for player to resume
 	}
@@ -72,7 +112,6 @@ func (npc *NPC) Draw(screen *ebiten.Image, pX, pY float64) {
 	fY := pY - npc.Y
 	opts.GeoM.Translate(fX, fY)
 	opts.GeoM.Scale(scale, scale)
-	//Draw Character at the center of the screen
 
 	screen.DrawImage(frame, opts)
 }

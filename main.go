@@ -461,14 +461,18 @@ func (g *Game) AddDoor(x1, y1, x2, y2 int, dest *Scene, id string, newX, newY fl
 }
 func (g *Game) AddNPC(spriteSheets map[string]*ebiten.Image) {
 	n := &npc.NPC{
-		X:            -500,
-		Y:            -500,
-		FrameWidth:   192 / 4, // The width of a single frame
-		FrameHeight:  68,      // The height of a single frame
-		FrameCount:   4,       // The total number of frames in the sprite sheet
-		SpriteSheets: spriteSheets,
-		Direction:    "right", // Default direction
-		Speed:        7.0,
+		X:                -1000,
+		Y:                -1000,
+		FrameWidth:       192 / 4, // The width of a single frame
+		FrameHeight:      68,      // The height of a single frame
+		FrameCount:       4,       // The total number of frames in the sprite sheet
+		SpriteSheets:     spriteSheets,
+		Direction:        "left", // Default direction
+		Speed:            7.0,
+		MoveTimer:        60,  // 1 second at 60 FPS
+		StopDuration:     120, // stops for 3 seconds
+		IsStopped:        true,
+		InteractionState: npc.NoInteraction,
 	}
 	g.CurrentScene.NPCs = append(g.CurrentScene.NPCs, n)
 }
