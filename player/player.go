@@ -12,6 +12,7 @@ type Player struct {
 	SpriteSheets map[string]*ebiten.Image // Map of sprite sheets for each direction
 	Direction    string
 	Speed        float64
+	CanMove      bool
 }
 
 func (p Player) CheckMove(dir string) (float64, float64) {

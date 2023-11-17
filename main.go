@@ -1,10 +1,12 @@
 package main
 
 import (
+	"ebi/npc"
 	"ebi/player"
 	"image"
 	"image/color"
 	"log"
+	"math"
 	"os"
 	"strings"
 
@@ -39,6 +41,8 @@ type Scene struct {
 	doors                  []*Door
 	background, Foreground *ebiten.Image
 	loadObsnDoors          func(*Game)
+	loadNPCs               func(*Game)
+	NPCs                   []*npc.NPC
 }
 
 type Game struct {
@@ -53,6 +57,7 @@ type Game struct {
 	selectedOption          int
 	keyPressCounter         map[ebiten.Key]int // Tracks duration of key presses
 	keyKPressedLastFrame    bool
+	keyZPressedLastFrame    bool
 }
 
 func (g *Game) Update() error {
@@ -100,35 +105,38 @@ func (g *Game) Update() error {
 		colliding := false
 		movementKeyPressed := false
 		var moveX, moveY float64
+		if g.player.CanMove {
+			// Handle player movement
+			if ebiten.IsKeyPressed(ebiten.KeyLeft) {
+				X, Y := g.player.CheckMove("left")
+				g.player.Direction = "left"
+				moveX = X
+				moveY = Y
+				movementKeyPressed = true
+			}
+			if ebiten.IsKeyPressed(ebiten.KeyRight) {
+				X, Y := g.player.CheckMove("right")
+				g.player.Direction = "right"
+				moveX = X
+				moveY = Y
+				movementKeyPressed = true
+			}
+			if ebiten.IsKeyPressed(ebiten.KeyUp) {
+				X, Y := g.player.CheckMove("up")
+				g.player.Direction = "up"
+				moveX = X
+				moveY = Y
+				movementKeyPressed = true
+			}
+			if ebiten.IsKeyPressed(ebiten.KeyDown) {
+				X, Y := g.player.CheckMove("down")
+				g.player.Direction = "down"
+				moveX = X
+				moveY = Y
+				movementKeyPressed = true
+			}
+		}
 
-		if ebiten.IsKeyPressed(ebiten.KeyLeft) {
-			X, Y := g.player.CheckMove("left")
-			g.player.Direction = "left"
-			moveX = X
-			moveY = Y
-			movementKeyPressed = true
-		}
-		if ebiten.IsKeyPressed(ebiten.KeyRight) {
-			X, Y := g.player.CheckMove("right")
-			g.player.Direction = "right"
-			moveX = X
-			moveY = Y
-			movementKeyPressed = true
-		}
-		if ebiten.IsKeyPressed(ebiten.KeyUp) {
-			X, Y := g.player.CheckMove("up")
-			g.player.Direction = "up"
-			moveX = X
-			moveY = Y
-			movementKeyPressed = true
-		}
-		if ebiten.IsKeyPressed(ebiten.KeyDown) {
-			X, Y := g.player.CheckMove("down")
-			g.player.Direction = "down"
-			moveX = X
-			moveY = Y
-			movementKeyPressed = true
-		}
 		// if moveX != 0 {
 		// 	fmt.Println(minX(moveX, g), minY(moveY, g))
 		// 	fmt.Println(*g.obstacles[0])
@@ -157,6 +165,25 @@ func (g *Game) Update() error {
 				}
 			}
 		}
+		// Check for proximity and key press to interact with the NPC
+		for _, cnpc := range g.CurrentScene.NPCs {
+			if nearNPC(minX(g.player.X, g), minY(g.player.Y, g), cnpc.X, cnpc.Y) {
+				if ebiten.IsKeyPressed(ebiten.KeyZ) && !g.keyZPressedLastFrame {
+					// Toggle NPC interaction state
+					if cnpc.InteractionState == npc.NoInteraction {
+						cnpc.InteractionState = npc.PlayerInteracted
+						g.player.CanMove = false // Disallow player movement
+					} else if cnpc.InteractionState == npc.WaitingForPlayerToResume {
+						cnpc.InteractionState = npc.NoInteraction
+						g.player.CanMove = true // Allow player movement
+					}
+				}
+			}
+			cnpc.Update(ebiten.KeyZ)
+
+		}
+		g.keyZPressedLastFrame = ebiten.IsKeyPressed(ebiten.KeyZ)
+		// Update NPC
 
 		// 	if moveY > float64(obstacle.Min.Y) {
 		// 		fmt.Println("Colliding")
@@ -178,25 +205,28 @@ func (g *Game) Update() error {
 
 		}
 		g.keyKPressedLastFrame = ebiten.IsKeyPressed(ebiten.KeyK)
-		if ebiten.IsKeyPressed(ebiten.KeyLeft) {
-			g.player.X = moveX
-			movementKeyPressed = true
-		}
-		if ebiten.IsKeyPressed(ebiten.KeyRight) {
-			g.player.X = moveX
-			movementKeyPressed = true
-		}
-		if ebiten.IsKeyPressed(ebiten.KeyUp) {
-			g.player.Y = moveY
-			movementKeyPressed = true
-		}
-		if ebiten.IsKeyPressed(ebiten.KeyDown) {
-			g.player.Y = moveY
-			movementKeyPressed = true
-		}
-		if movementKeyPressed {
-			// Increment the tick count
-			g.player.TickCount++
+		if g.player.CanMove {
+			// Handle player movement
+			if ebiten.IsKeyPressed(ebiten.KeyLeft) {
+				g.player.X = moveX
+				movementKeyPressed = true
+			}
+			if ebiten.IsKeyPressed(ebiten.KeyRight) {
+				g.player.X = moveX
+				movementKeyPressed = true
+			}
+			if ebiten.IsKeyPressed(ebiten.KeyUp) {
+				g.player.Y = moveY
+				movementKeyPressed = true
+			}
+			if ebiten.IsKeyPressed(ebiten.KeyDown) {
+				g.player.Y = moveY
+				movementKeyPressed = true
+			}
+			if movementKeyPressed {
+				// Increment the tick count
+				g.player.TickCount++
+			}
 		}
 
 		// Update the current frame every 10 ticks
@@ -225,6 +255,11 @@ func (g *Game) Update() error {
 		}
 	}
 	return nil
+}
+func nearNPC(playerX, playerY, npcX, npcY float64) bool {
+	// Define what "near" means, e.g., within 50 pixels
+	const proximityThreshold = 50.0
+	return math.Abs(playerX-npcX) < proximityThreshold && math.Abs(playerY-npcY) < proximityThreshold
 }
 func minX(moveX float64, g *Game) float64 {
 	screenWidth, _ := ebiten.WindowSize()
@@ -315,6 +350,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		charX := float64(screenWidth)/2 - float64(charWidth)/4
 		charY := float64(screenHeight)/2 - float64(charHeight)/4
 		opts.GeoM.Translate(charX, charY)
+		for _, cnpc := range g.CurrentScene.NPCs {
+			cnpc.Draw(screen, g.player.X, g.player.Y)
+		}
 		screen.DrawImage(frame, opts)
 		screen.DrawImage(g.CurrentScene.Foreground, bgOpts)
 
@@ -421,19 +459,32 @@ func (g *Game) AddDoor(x1, y1, x2, y2 int, dest *Scene, id string, newX, newY fl
 	}
 	g.CurrentScene.doors = append(g.CurrentScene.doors, d)
 }
-
-func newScene(foreground *ebiten.Image, background *ebiten.Image, fn func(*Game)) *Scene {
+func (g *Game) AddNPC(spriteSheets map[string]*ebiten.Image) {
+	n := &npc.NPC{
+		X:            -500,
+		Y:            -500,
+		FrameWidth:   192 / 4, // The width of a single frame
+		FrameHeight:  68,      // The height of a single frame
+		FrameCount:   4,       // The total number of frames in the sprite sheet
+		SpriteSheets: spriteSheets,
+		Direction:    "right", // Default direction
+		Speed:        7.0,
+	}
+	g.CurrentScene.NPCs = append(g.CurrentScene.NPCs, n)
+}
+func newScene(foreground *ebiten.Image, background *ebiten.Image, fn, fn2 func(*Game)) *Scene {
 	return &Scene{
 		Foreground:    foreground,
 		background:    background,
 		loadObsnDoors: fn,
+		loadNPCs:      fn2,
 	}
 }
 func (g *Game) loadScenes() {
 	bg1, fg1 := loadBackground("assets/mainMap.png", "assets/over.png")
 	bg2, fg2 := loadBackground("assets/mainMapRed.png", "assets/overRed.png")
-	mainScene := newScene(bg1, fg1, loadObsnDoorss)
-	secondScene := newScene(bg2, fg2, loadObsnDoors2)
+	mainScene := newScene(bg1, fg1, loadObsnDoorss, loadNPCBryan)
+	secondScene := newScene(bg2, fg2, loadObsnDoors2, loadNPCBryan)
 	mainScene.Game = g
 	secondScene.Game = g
 	g.Scenes = append(g.Scenes, mainScene)
@@ -443,6 +494,35 @@ func (g *Game) loadScenes() {
 
 func (g *Game) changeScene(from *Scene, to *Scene) {
 	g.CurrentScene = to
+}
+func loadNPCBryan(g *Game) {
+	// Create a map to hold the sprite sheets
+	spriteSheets := make(map[string]*ebiten.Image)
+
+	// List of directions
+	directions := []string{"up", "down", "right", "left"}
+
+	// Loop over the directions and load the corresponding sprite sheet
+	for _, direction := range directions {
+		// Construct the file path for the sprite sheet
+		// This assumes you have files named like "playerUp.png", "playerDown.png", etc.
+		if direction == "left" {
+			spriteSheets["left"] = spriteSheets["right"]
+			break
+		}
+		path := "assets/player" + strings.Title(direction) + "Blue" + ".png"
+
+		// Load the image
+		img, _, err := ebitenutil.NewImageFromFile(path)
+		if err != nil {
+			log.Fatalf("failed to load '%s' sprite sheet: %v", direction, err)
+		}
+
+		// Store the loaded image in the map
+		spriteSheets[direction] = img
+	}
+
+	g.AddNPC(spriteSheets)
 }
 func loadObsnDoorss(g *Game) {
 	if len(g.CurrentScene.obstacles) == 0 {
@@ -531,10 +611,12 @@ func NewGame() *Game {
 			SpriteSheets: spriteSheets,
 			Direction:    "down", // Default direction
 			Speed:        7.0,
+			CanMove:      true,
 		},
 	}
 	g.loadScenes()
 	g.CurrentScene.loadObsnDoors(g)
+	g.CurrentScene.loadNPCs(g)
 	// g.AddObstacle(0, 0, 300, 300)       // Debug collision box
 
 	// g.AddObstacle()
