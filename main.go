@@ -3,13 +3,14 @@ package main
 import (
 	"ebi/npc"
 	"ebi/player"
-	"fmt"
 	"image"
 	"image/color"
 	"log"
 	"math"
 	"os"
-	"strings"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -69,7 +70,9 @@ type Game struct {
 	keyPressCounter         map[ebiten.Key]int // Tracks duration of key presses
 	keyKPressedLastFrame    bool
 	keyZPressedLastFrame    bool
-	dialogue                *Dialogue
+	// keyRPressedLastFrame    bool
+	dialogue *Dialogue
+	fface    font.Face
 }
 
 func (g *Game) Update() error {
@@ -114,10 +117,48 @@ func (g *Game) Update() error {
 			}
 		}
 	} else if g.state == PlayState {
+		for _, cnpc := range g.CurrentScene.NPCs {
+			if nearNPC(minX(g.player.X, g), minY(g.player.Y, g), cnpc.X, cnpc.Y) {
+				if ebiten.IsKeyPressed(ebiten.KeyZ) && !g.keyZPressedLastFrame {
+					// Toggle NPC interaction state
+					if cnpc.InteractionState == npc.NoInteraction {
+						cnpc.InteractionState = npc.PlayerInteracted
+						g.player.CanMove = false // Disallow player movement
+					} else if cnpc.InteractionState == npc.WaitingForPlayerToResume && g.dialogue.Finished && g.dialogue.IsLastLine() {
+						cnpc.InteractionState = npc.NoInteraction
+						g.player.CanMove = true // Allow player movement
+					}
+				}
+			}
+			cnpc.Update(ebiten.KeyZ)
+			if ebiten.IsKeyPressed(ebiten.KeyZ) && !g.keyZPressedLastFrame && nearNPC(minX(g.player.X, g), minY(g.player.Y, g), cnpc.X, cnpc.Y) {
+				if !g.dialogue.IsOpen {
+					g.dialogue.IsOpen = true
+					g.dialogue.CurrentLine = 0
+					g.dialogue.CharIndex = 0
+					g.dialogue.Finished = false
+				} else {
+					if g.dialogue.Finished {
+						g.dialogue.NextLine()
+					} else {
+						// Instantly display all characters in the current line
+						g.dialogue.CharIndex = len(g.dialogue.TextLines[g.dialogue.CurrentLine])
+						g.dialogue.Finished = true
+					}
+				}
+
+			}
+
+			g.dialogue.Update()
+
+		}
+
+		g.keyZPressedLastFrame = ebiten.IsKeyPressed(ebiten.KeyZ)
 		colliding := false
 		movementKeyPressed := false
 		var moveX, moveY float64
 		if g.player.CanMove {
+
 			// Handle player movement
 			if ebiten.IsKeyPressed(ebiten.KeyLeft) {
 				X, Y := g.player.CheckMove("left")
@@ -179,36 +220,25 @@ func (g *Game) Update() error {
 		}
 		// Check for proximity and key press to interact with the NPC
 
-		for _, cnpc := range g.CurrentScene.NPCs {
-			if nearNPC(minX(g.player.X, g), minY(g.player.Y, g), cnpc.X, cnpc.Y) {
-				if ebiten.IsKeyPressed(ebiten.KeyZ) && !g.keyZPressedLastFrame {
-					// Toggle NPC interaction state
-					if cnpc.InteractionState == npc.NoInteraction {
-						cnpc.InteractionState = npc.PlayerInteracted
-						g.player.CanMove = false // Disallow player movement
-					} else if cnpc.InteractionState == npc.WaitingForPlayerToResume {
-						cnpc.InteractionState = npc.NoInteraction
-						g.player.CanMove = true // Allow player movement
-					}
-				}
-			}
-			cnpc.Update(ebiten.KeyZ)
-			if ebiten.IsKeyPressed(ebiten.KeyZ) && !g.keyZPressedLastFrame {
-				fmt.Println("Reached")
-				if g.dialogue.Finished {
-					g.dialogue.NextLine()
-				} else {
-					// Instantly display all characters in the current line
-					g.dialogue.CharIndex = len(g.dialogue.TextLines[g.dialogue.CurrentLine])
-					g.dialogue.Finished = true
-				}
-			}
+		// if ebiten.IsKeyPressed(ebiten.KeyR) && !g.keyRPressedLastFrame {
+		// 	if !g.dialogue.IsOpen {
+		// 		g.dialogue.IsOpen = true
+		// 		g.dialogue.CurrentLine = 0
+		// 		g.dialogue.CharIndex = 0
+		// 		g.dialogue.Finished = false
+		// 	} else {
+		// 		if g.dialogue.Finished {
+		// 			g.dialogue.NextLine()
+		// 		} else {
+		// 			// Instantly display all characters in the current line
+		// 			g.dialogue.CharIndex = len(g.dialogue.TextLines[g.dialogue.CurrentLine])
+		// 			g.dialogue.Finished = true
+		// 		}
 
-			g.dialogue.Update()
-
-		}
-
-		g.keyZPressedLastFrame = ebiten.IsKeyPressed(ebiten.KeyZ)
+		// 	}
+		// 	g.dialogue.Update()
+		// }
+		// g.keyRPressedLastFrame = ebiten.IsKeyPressed(ebiten.KeyR)
 
 		if ebiten.IsKeyPressed(ebiten.KeyK) && !g.keyKPressedLastFrame {
 			if g.CurrentScene == g.Scenes[0] {
@@ -241,6 +271,7 @@ func (g *Game) Update() error {
 				// Increment the tick count
 				g.player.TickCount++
 			}
+
 		}
 
 		// Update the current frame every 10 ticks
@@ -269,6 +300,9 @@ func (g *Game) Update() error {
 		}
 	}
 	return nil
+}
+func (d *Dialogue) IsLastLine() bool {
+	return d.CurrentLine == len(d.TextLines)-1
 }
 func nearNPC(playerX, playerY, npcX, npcY float64) bool {
 	npcX *= -1
@@ -346,16 +380,16 @@ func (d *Dialogue) NextLine() {
 		d.IsOpen = false
 	}
 }
-func (d *Dialogue) Draw(screen *ebiten.Image) {
+func (d *Dialogue) Draw(screen *ebiten.Image, g *Game) {
 	if !d.IsOpen {
 		return
 	}
 
 	// Set up the dialogue box dimensions
-	boxWidth := screen.Bounds().Dx() - 20         // 20 pixels padding on each side
-	boxHeight := 60                               // Fixed height for the dialogue box
+	boxWidth := screen.Bounds().Dx() - 20         // 10 pixels padding on each side
+	boxHeight := 63                               // Fixed height for the dialogue box
 	boxX := 10                                    // X position of the box
-	boxY := screen.Bounds().Dy() - boxHeight - 10 // Y position of the box, 20 pixels above the bottom of the screen
+	boxY := screen.Bounds().Dy() - boxHeight - 10 // Y position of the box, 10 pixels above the bottom of the screen
 
 	// Draw the dialogue box background
 	dialogueBox := ebiten.NewImage(boxWidth, boxHeight)
@@ -363,20 +397,24 @@ func (d *Dialogue) Draw(screen *ebiten.Image) {
 	opts := &ebiten.DrawImageOptions{}
 	opts.GeoM.Translate(float64(boxX), float64(boxY))
 	screen.DrawImage(dialogueBox, opts)
-	fontFace, err := loadFontFace()
+	charImg, _, err := ebitenutil.NewImageFromFile("assets/animBoy.png")
+	if err != nil {
+		log.Fatal(err)
+	}
+	charOpts := &ebiten.DrawImageOptions{}
+	charOpts.GeoM.Translate(float64(boxX), float64(boxY))
+	screen.DrawImage(charImg, charOpts)
+	fontFace := g.fface
 	if err != nil {
 		log.Fatal(err)
 	}
 	// Draw the text with the typewriter effect
 	textToDisplay := d.TextLines[d.CurrentLine][:d.CharIndex]
-	text.Draw(screen, textToDisplay, fontFace, boxX+10, boxY+30, color.White) // +10 for text padding, +30 to vertically center
+	text.Draw(screen, textToDisplay, fontFace, boxX+70, boxY+17, color.White) // +10 for text padding, +30 to vertically center
 }
 func (g *Game) Draw(screen *ebiten.Image) {
 	if g.state == MenuState {
-		fontFace, err := loadFontFace()
-		if err != nil {
-			log.Fatal(err)
-		}
+		fontFace := g.fface
 		x := 4
 		y := 20
 		spacing := 20
@@ -424,7 +462,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		}
 		screen.DrawImage(frame, opts)
 		screen.DrawImage(g.CurrentScene.Foreground, bgOpts)
-		g.dialogue.Draw(screen)
+		g.dialogue.Draw(screen, g)
 
 	} else if g.state == TransitionState || g.state == NewSceneState {
 		scale := 0.25
@@ -488,7 +526,8 @@ func loadSpriteSheets() map[string]*ebiten.Image {
 			spriteSheets["left"] = spriteSheets["right"]
 			break
 		}
-		path := "assets/player" + strings.Title(direction) + "Black" + ".png"
+		c := cases.Upper(language.English)
+		path := "assets/player" + c.String(direction) + "Black" + ".png"
 
 		// Load the image
 		img, _, err := ebitenutil.NewImageFromFile(path)
@@ -585,7 +624,8 @@ func loadNPCBryan(g *Game) {
 			spriteSheets["left"] = spriteSheets["right"]
 			break
 		}
-		path := "assets/player" + strings.Title(direction) + "Blue" + ".png"
+		c := cases.Upper(language.English)
+		path := "assets/player" + c.String(direction) + "Blue" + ".png"
 
 		// Load the image
 		img, _, err := ebitenutil.NewImageFromFile(path)
@@ -670,9 +710,14 @@ func loadObsnDoors2(g *Game) {
 func NewGame() *Game {
 	// Load the sprite sheet
 	spriteSheets := loadSpriteSheets()
+	f, err := loadFontFace()
+	if err != nil {
+		log.Fatal(err)
+	}
 	// Create an instance of the Game struct
 	g := &Game{
-		state:          MenuState,
+		state:          PlayState,
+		fface:          f,
 		menuOptions:    []string{"Start Game", "Options", "Exit"},
 		selectedOption: 0,
 		alpha:          0.0,
@@ -701,9 +746,9 @@ func NewGame() *Game {
 }
 func newDialogue() *Dialogue {
 	d := &Dialogue{
-		TextLines:     []string{"This is the first line of dialogue.", "This is the second line."},
+		TextLines:     []string{"Lets go on a trip together!", "How much dialogue do you need?"},
 		FramesPerChar: 2, // For example, one character every 2 frames
-		IsOpen:        true,
+		IsOpen:        false,
 		CurrentLine:   0,
 		CharIndex:     0,
 	}
