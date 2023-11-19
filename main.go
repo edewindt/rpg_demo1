@@ -8,6 +8,7 @@ import (
 	"log"
 	"math"
 	"os"
+	"strings"
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -18,6 +19,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/text"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
+	"golang.org/x/image/math/fixed"
 )
 
 type GameState int
@@ -410,7 +412,7 @@ func (d *Dialogue) Draw(screen *ebiten.Image, g *Game) {
 	}
 	// Draw the text with the typewriter effect
 	textToDisplay := d.TextLines[d.CurrentLine][:d.CharIndex]
-	text.Draw(screen, textToDisplay, fontFace, boxX+70, boxY+17, color.White) // +10 for text padding, +30 to vertically center
+	text.Draw(screen, wrapText(textToDisplay, 225, fontFace), fontFace, boxX+70, boxY+17, color.White) // +10 for text padding, +30 to vertically center
 }
 func (g *Game) Draw(screen *ebiten.Image) {
 	if g.state == MenuState {
@@ -707,6 +709,31 @@ func loadObsnDoors2(g *Game) {
 	}
 
 }
+func wrapText(text string, maxWidth int, face font.Face) string {
+	var wrapped string
+	var lineWidth fixed.Int26_6
+	spaceWidth := font.MeasureString(face, " ")
+
+	for _, word := range strings.Fields(text) {
+		wordWidth := font.MeasureString(face, word)
+
+		// If adding the new word exceeds the max width, then insert a new line
+		if lineWidth > 0 && lineWidth+wordWidth+spaceWidth > fixed.I(maxWidth) {
+			wrapped += "\n"
+			lineWidth = 0
+		}
+
+		if lineWidth > 0 {
+			wrapped += " "
+			lineWidth += spaceWidth
+		}
+
+		wrapped += word
+		lineWidth += wordWidth
+	}
+
+	return wrapped
+}
 func NewGame() *Game {
 	// Load the sprite sheet
 	spriteSheets := loadSpriteSheets()
@@ -746,7 +773,7 @@ func NewGame() *Game {
 }
 func newDialogue() *Dialogue {
 	d := &Dialogue{
-		TextLines:     []string{"Lets go on a trip together!", "How much dialogue do you need?"},
+		TextLines:     []string{"Lets go on a trip together! How much dialogue do you need?", "Liten up fella, I really hate doing this, but you kind of smell like rotten eggs took a piss in a toilet."},
 		FramesPerChar: 2, // For example, one character every 2 frames
 		IsOpen:        false,
 		CurrentLine:   0,
