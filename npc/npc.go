@@ -1,6 +1,7 @@
 package npc
 
 import (
+	"fmt"
 	"image"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -12,6 +13,7 @@ const (
 	NoInteraction InteractionState = iota
 	PlayerInteracted
 	WaitingForPlayerToResume
+	CutSceneInteraction
 )
 
 type NPC struct {
@@ -28,11 +30,11 @@ type NPC struct {
 	SpriteSheets     map[string]*ebiten.Image // Map of sprite sheets for each direction
 	Direction        string
 	Speed            float64
+	DialogueText     []string
 	InteractionState InteractionState
 }
 
 func (npc *NPC) Move(dir string) {
-
 	switch dir {
 	case "left":
 		npc.X += npc.Speed // Move left
@@ -82,6 +84,8 @@ func (npc *NPC) Update(interactionKey ebiten.Key) {
 
 			}
 		}
+	} else if npc.InteractionState == CutSceneInteraction {
+		fmt.Println("In a cutscene")
 	}
 }
 

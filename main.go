@@ -3,15 +3,13 @@ package main
 import (
 	"ebi/npc"
 	"ebi/player"
+	"fmt"
 	"image"
 	"image/color"
 	"log"
 	"math"
 	"os"
 	"strings"
-
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -20,6 +18,8 @@ import (
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/math/fixed"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 type GameState int
@@ -30,7 +30,48 @@ const (
 	OptionsState
 	TransitionState
 	NewSceneState
+	CutsceneState
 )
+
+type CutsceneActionType int
+
+const (
+	MovePlayer CutsceneActionType = iota
+	MoveNPC
+	ShowDialogue
+	TeleportNPC
+	TeleportPlayer
+	TurnNPC
+	TurnPlayer
+	FadeIn
+	FadeOut
+	ChangeScene
+)
+
+type CutsceneAction struct {
+	ActionType   CutsceneActionType
+	Target       interface{}
+	Data         interface{}
+	WaitPrevious bool // Whether to wait for previous actions to complete
+}
+type Vector2D struct {
+	X, Y float64
+}
+
+type Cutscene struct {
+	Game          *Game
+	Actions       []CutsceneAction
+	Current       int
+	ActiveActions map[int]bool // Tracks active actions by their index
+	IsPlaying     bool
+	CleanUp       func(*Cutscene)
+}
+
+type GameProgress struct {
+	HasVisitedRedTown     bool
+	HasMetNPCBryan        bool
+	FirstCutSceneFinished bool
+}
 
 type Door struct {
 	Rect        *image.Rectangle
@@ -66,6 +107,8 @@ type Game struct {
 	fadeSpeed               float64 // How fast the fade occurs
 	menuOptions             []string
 	Scenes                  []*Scene
+	Progress                GameProgress
+	Cutscene                Cutscene
 	CurrentScene, NextScene *Scene
 	CurrentDoor             *Door
 	selectedOption          int
@@ -83,8 +126,7 @@ func (g *Game) Update() error {
 	}
 	if g.state == OptionsState {
 		os.Exit(0)
-	}
-	if g.state == MenuState {
+	} else if g.state == MenuState {
 		keys := []ebiten.Key{
 			ebiten.KeyUp,
 			ebiten.KeyDown,
@@ -125,6 +167,7 @@ func (g *Game) Update() error {
 					// Toggle NPC interaction state
 					if cnpc.InteractionState == npc.NoInteraction {
 						cnpc.InteractionState = npc.PlayerInteracted
+						g.Progress.HasMetNPCBryan = true
 						g.player.CanMove = false // Disallow player movement
 					} else if cnpc.InteractionState == npc.WaitingForPlayerToResume && g.dialogue.Finished && g.dialogue.IsLastLine() {
 						cnpc.InteractionState = npc.NoInteraction
@@ -139,6 +182,7 @@ func (g *Game) Update() error {
 					g.dialogue.CurrentLine = 0
 					g.dialogue.CharIndex = 0
 					g.dialogue.Finished = false
+					g.dialogue.TextLines = cnpc.DialogueText
 				} else {
 					if g.dialogue.Finished {
 						g.dialogue.NextLine()
@@ -154,8 +198,53 @@ func (g *Game) Update() error {
 			g.dialogue.Update()
 
 		}
-
+		fmt.Println("Player:", g.player.X, g.player.Y)
+		fmt.Println("NPC:", g.CurrentScene.NPCs[0].X, g.CurrentScene.NPCs[0].Y)
 		g.keyZPressedLastFrame = ebiten.IsKeyPressed(ebiten.KeyZ)
+		if g.Progress.HasMetNPCBryan && g.Progress.HasVisitedRedTown && !g.dialogue.IsOpen && !g.Progress.FirstCutSceneFinished && g.CurrentScene == g.Scenes[1] {
+			g.Cutscene = createExampleCutscene(g)
+			g.Cutscene.Start()
+			g.state = CutsceneState
+			// fmt.Println("Progress Attained")
+			// n := g.CurrentScene.NPCs[0]
+			// p := g.player
+
+			// g.player.X = -500
+			// g.player.Y = -500
+			// if nearNPC(minX(g.player.X, g), minY(g.player.Y, g), n.X, n.Y) {
+			// 	n.IsStopped = true
+			// 	n.StopTimer = 100
+			// }
+			// p.X += p.Speed
+			// p.Y += p.Speed
+			// n.X += n.Speed
+			// n.Y += n.Speed
+			// // n.X =
+			// // n.Y =
+			// // p.CanMove = false
+			// p.Direction = "left"
+			// p.CurrentFrame = 1
+			// g.Progress.FirstCutSceneFinished = true
+			// t := false
+			// g.alpha += g.fadeSpeed
+			// if g.alpha >= 1.0 {
+			// 	g.alpha = 1.0
+			// 	t = true
+			// 	// g.player.X = g.CurrentDoor.NewX
+			// 	// g.player.Y = g.CurrentDoor.NewY
+			// 	// g.CurrentScene.loadObsnDoors(g)
+			// 	// g.CurrentScene.loadNPCs(g)
+			// } else if t {
+			// 	fmt.Println("Went Black")
+			// 	// Decrease the alpha for the fade in effect
+			// 	g.alpha -= g.fadeSpeed
+			// 	if g.alpha <= 0.0 {
+			// 		g.alpha = 0.0
+			// 		g.state = PlayState
+			// 		// The new scene is fully visible now, and game continues as normal
+			// 	}
+			// }
+		}
 		colliding := false
 		movementKeyPressed := false
 		var moveX, moveY float64
@@ -217,6 +306,7 @@ func (g *Game) Update() error {
 				if colliding {
 					g.state = TransitionState
 					g.CurrentDoor = door
+					g.Progress.HasVisitedRedTown = true
 				}
 			}
 		}
@@ -243,11 +333,15 @@ func (g *Game) Update() error {
 		// g.keyRPressedLastFrame = ebiten.IsKeyPressed(ebiten.KeyR)
 
 		if ebiten.IsKeyPressed(ebiten.KeyK) && !g.keyKPressedLastFrame {
-			if g.CurrentScene == g.Scenes[0] {
-				g.changeScene(g.Scenes[0], g.Scenes[1])
-			} else {
-				g.changeScene(g.Scenes[1], g.Scenes[0])
-			}
+			g.Progress.FirstCutSceneFinished = !g.Progress.FirstCutSceneFinished
+			// g.Progress.HasMetNPCBryan = false
+			// g.Progress.HasVisitedRedTown = false
+
+			// if g.CurrentScene == g.Scenes[0] {
+			// 	g.changeScene(g.Scenes[0], g.Scenes[1])
+			// } else {
+			// 	g.changeScene(g.Scenes[1], g.Scenes[0])
+			// }
 
 		}
 		g.keyKPressedLastFrame = ebiten.IsKeyPressed(ebiten.KeyK)
@@ -291,6 +385,7 @@ func (g *Game) Update() error {
 			g.player.X = g.CurrentDoor.NewX
 			g.player.Y = g.CurrentDoor.NewY
 			g.CurrentScene.loadObsnDoors(g)
+			g.CurrentScene.loadNPCs(g)
 		}
 	} else if g.state == NewSceneState {
 		// Decrease the alpha for the fade in effect
@@ -300,9 +395,269 @@ func (g *Game) Update() error {
 			g.state = PlayState
 			// The new scene is fully visible now, and game continues as normal
 		}
+	} else if g.state == CutsceneState {
+		g.Cutscene.Update()
+
+		g.keyZPressedLastFrame = ebiten.IsKeyPressed(ebiten.KeyZ)
 	}
 	return nil
 }
+func CleanUpCutScene1(c *Cutscene) {
+	c.IsPlaying = false
+	c.Game.CurrentScene.NPCs[0].X = -900
+	c.Game.CurrentScene.NPCs[0].Y = -950
+
+	c.Game.Progress.FirstCutSceneFinished = true
+	fmt.Println("finished")
+}
+func (c *Cutscene) Start() {
+	c.Current = 0
+	c.IsPlaying = true
+	c.ActiveActions = make(map[int]bool)
+}
+
+func (c *Cutscene) Update() {
+	if !c.IsPlaying {
+		return
+	}
+
+	for i, action := range c.Actions {
+		if i < c.Current && !c.ActiveActions[i] {
+			// Skip completed actions
+			continue
+		}
+
+		if action.WaitPrevious && i > c.Current {
+			// If the action should wait for previous ones, don't start it yet
+			continue
+		}
+
+		// Process the action
+		completed := c.processAction(action)
+		if completed {
+			c.ActiveActions[i] = false // Mark action as completed
+			if i == c.Current {
+				c.Current++ // Move to the next action
+			}
+		} else {
+			c.ActiveActions[i] = true // Mark action as active
+		}
+	}
+
+	// Check if all actions are completed
+	if c.Current >= len(c.Actions) {
+		c.CleanUp(c)
+		c.Game.state = PlayState
+	}
+}
+
+func (c *Cutscene) processAction(action CutsceneAction) bool {
+	switch action.ActionType {
+	case MoveNPC:
+		cnpc := action.Target.(*npc.NPC)
+		destination := action.Data.(Vector2D)
+		return moveTowards(cnpc, destination)
+	case MovePlayer:
+		p := action.Target.(*player.Player)
+		destination := action.Data.(Vector2D)
+		return moveTowards(p, destination)
+	case FadeOut:
+		g := c.Game
+		g.alpha += action.Data.(float64)
+		f := false
+		if g.alpha >= 1.0 {
+			g.alpha = 1.0
+			f = true
+		}
+		return f
+	case FadeIn:
+		g := c.Game
+		g.alpha -= action.Data.(float64)
+		f := false
+		if g.alpha <= 0.0 {
+			g.alpha = 0.0
+			f = true
+			// The new scene is fully visible now, and game continues as normal
+		}
+		return f
+	case TeleportPlayer:
+		p := action.Target.(*player.Player)
+		destination := action.Data.(Vector2D)
+		p.X = destination.X
+		p.Y = destination.Y
+		return true
+	case TeleportNPC:
+		cnpc := action.Target.(*npc.NPC)
+		destination := action.Data.(Vector2D)
+		cnpc.X = destination.X
+		cnpc.Y = destination.Y
+		return true
+	case TurnPlayer:
+		p := action.Target.(*player.Player)
+		dir := action.Data.(string)
+		p.Direction = dir
+		return true
+	case TurnNPC:
+		p := action.Target.(*npc.NPC)
+		dir := action.Data.(string)
+		p.Direction = dir
+		return true
+	case ShowDialogue:
+		d := action.Target.(*Dialogue)
+		if !d.IsOpen {
+			d.IsOpen = true
+			d.CurrentLine = 0
+			d.CharIndex = 0
+			d.Finished = false
+			d.TextLines = action.Data.([]string)
+		} else {
+			g := c.Game
+			if ebiten.IsKeyPressed(ebiten.KeyZ) && !g.keyZPressedLastFrame {
+				fmt.Println("Pressed Z")
+				if d.Finished {
+					d.NextLine()
+					if !d.IsOpen {
+						return true
+					}
+				} else {
+					// Instantly display all characters in the current line
+					d.CharIndex = len(d.TextLines[d.CurrentLine])
+					d.Finished = true
+				}
+				g.keyZPressedLastFrame = ebiten.IsKeyPressed(ebiten.KeyZ)
+
+			}
+			d.Update()
+			// return d.Finished
+		}
+	}
+	return false
+}
+
+func moveTowards(entity interface{}, target Vector2D) bool {
+	const speed = 1.0
+	res := false
+	switch e := entity.(type) {
+	case *player.Player:
+		if e.X < target.X {
+			e.Direction = "left"
+			e.X += speed
+		} else if e.X > target.X {
+			e.Direction = "right"
+			e.X -= speed
+		} else if e.Y > target.Y {
+			e.Direction = "down"
+			e.Y -= speed
+		} else if e.Y < target.Y {
+			e.Direction = "up"
+			e.Y += speed
+		} else {
+			e.CurrentFrame = 2
+			res = true
+		}
+		e.TickCount++
+		if e.TickCount >= 10 && !res {
+			e.CurrentFrame = (e.CurrentFrame + 1) % e.FrameCount
+			e.TickCount = 0 // Reset the tick count
+		}
+	case *npc.NPC:
+		if e.X < target.X {
+			e.Direction = "left"
+			e.X += speed
+		} else if e.X > target.X {
+			e.Direction = "right"
+			e.X -= speed
+		} else if e.Y > target.Y {
+			e.Direction = "down"
+			e.Y -= speed
+		} else if e.Y < target.Y {
+			e.Direction = "up"
+			e.Y += speed
+		} else {
+			e.CurrentFrame = 2
+			res = true
+		}
+		e.TickCount++
+		if e.TickCount >= 10 && !res {
+			e.CurrentFrame = (e.CurrentFrame + 1) % e.FrameCount
+			e.TickCount = 0 // Reset the tick count
+		}
+	default:
+		res = true
+	}
+	return res
+}
+
+func createExampleCutscene(g *Game) Cutscene {
+	return Cutscene{
+		CleanUp: CleanUpCutScene1,
+		Game:    g,
+		Actions: []CutsceneAction{
+			{
+				ActionType:   FadeOut,
+				Data:         0.01,
+				WaitPrevious: false,
+			},
+			{
+				ActionType:   TeleportPlayer,
+				Target:       g.player,
+				Data:         Vector2D{X: 100, Y: 100},
+				WaitPrevious: true,
+			},
+			{
+				ActionType:   TeleportNPC,
+				Target:       g.CurrentScene.NPCs[0],
+				Data:         Vector2D{X: 150 - 600, Y: 150 - 400},
+				WaitPrevious: true,
+			},
+			{
+				ActionType:   FadeIn,
+				Data:         0.01,
+				WaitPrevious: true,
+			},
+			{
+				ActionType:   MovePlayer,
+				Target:       g.player,
+				Data:         Vector2D{X: -100, Y: -140}, // Target position for player
+				WaitPrevious: true,
+			},
+			{
+				ActionType:   MoveNPC,
+				Target:       g.CurrentScene.NPCs[0],
+				Data:         Vector2D{X: -150 - 600, Y: -150 - 400}, // Target position for NPC
+				WaitPrevious: false,
+			},
+			{
+				ActionType:   TurnNPC,
+				Target:       g.CurrentScene.NPCs[0],
+				Data:         "left",
+				WaitPrevious: true,
+			},
+			{
+				ActionType:   TurnPlayer,
+				Target:       g.player,
+				Data:         "right",
+				WaitPrevious: true,
+			},
+			{
+				ActionType:   ShowDialogue,
+				Target:       g.dialogue,
+				Data:         []string{"This is our first Scene.", "Pretty Cool huh?"},
+				WaitPrevious: true,
+			},
+		},
+	}
+}
+func (g *Game) StartCutscene() {
+
+	g.Cutscene = createExampleCutscene(g)
+	g.Cutscene.Start()
+
+}
+
+//	func (c *Cutscene) Draw(screen *ebiten.Image) {
+//		// ... draw anything related to the cutscene ...
+//	}
 func (d *Dialogue) IsLastLine() bool {
 	return d.CurrentLine == len(d.TextLines)-1
 }
@@ -505,6 +860,47 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		fadeColor := color.RGBA{0, 0, 0, uint8(g.alpha * 0xff)} // Black with variable alpha
 		fadeImage.Fill(fadeColor)
 		screen.DrawImage(fadeImage, nil)
+	} else if g.state == CutsceneState {
+		scale := 0.25
+		bgOpts := &ebiten.DrawImageOptions{}
+		bgOpts.GeoM.Translate(g.player.X, g.player.Y)
+		bgOpts.GeoM.Scale(scale, scale)
+		screen.DrawImage(g.CurrentScene.background, bgOpts)
+		currentSpriteSheet := g.player.SpriteSheets[g.player.Direction]
+		// 	// Determine the x, y location of the current frame on the sprite sheet
+		sx := (g.player.CurrentFrame % (currentSpriteSheet.Bounds().Dx() / g.player.FrameWidth)) * g.player.FrameWidth
+		sy := (g.player.CurrentFrame / (currentSpriteSheet.Bounds().Dx() / g.player.FrameWidth)) * g.player.FrameHeight
+
+		// 	// Create a sub-image that represents the current frame
+		frame := currentSpriteSheet.SubImage(image.Rect(sx, sy, sx+g.player.FrameWidth, sy+g.player.FrameHeight)).(*ebiten.Image)
+
+		// Draw the sub-image on the screen
+		opts := &ebiten.DrawImageOptions{}
+		// If the direction is left, flip the image on the vertical axis
+		if g.player.Direction == "left" {
+			opts.GeoM.Scale(-1, 1)                               // Flip horizontally
+			opts.GeoM.Translate(float64(g.player.FrameWidth), 0) // Adjust the position after flipping
+		}
+
+		opts.GeoM.Scale(scale, scale)
+		//Draw Character at the center of the screen
+		screenWidth := screen.Bounds().Dx()
+		screenHeight := screen.Bounds().Dy()
+		charWidth := frame.Bounds().Dx()
+		charHeight := frame.Bounds().Dy()
+		charX := float64(screenWidth)/2 - float64(charWidth)/4
+		charY := float64(screenHeight)/2 - float64(charHeight)/4
+		opts.GeoM.Translate(charX, charY)
+		for _, cnpc := range g.CurrentScene.NPCs {
+			cnpc.Draw(screen, g.player.X, g.player.Y)
+		}
+		screen.DrawImage(frame, opts)
+		screen.DrawImage(g.CurrentScene.Foreground, bgOpts)
+		g.dialogue.Draw(screen, g)
+		fadeImage := ebiten.NewImage(screen.Bounds().Dx(), screen.Bounds().Dy())
+		fadeColor := color.RGBA{0, 0, 0, uint8(g.alpha * 0xff)} // Black with variable alpha
+		fadeImage.Fill(fadeColor)
+		screen.DrawImage(fadeImage, nil)
 	}
 
 }
@@ -585,6 +981,7 @@ func (g *Game) AddNPC(spriteSheets map[string]*ebiten.Image) {
 		StopDuration:     120, // stops for 3 seconds
 		IsStopped:        true,
 		InteractionState: npc.NoInteraction,
+		DialogueText:     []string{"Lets go on a trip together! How much dialogue do you need?", "Liten up fella, I really hate doing this, but you kind of smell like rotten eggs took a piss in a toilet."},
 	}
 	g.CurrentScene.NPCs = append(g.CurrentScene.NPCs, n)
 }
@@ -612,34 +1009,37 @@ func (g *Game) changeScene(from *Scene, to *Scene) {
 	g.CurrentScene = to
 }
 func loadNPCBryan(g *Game) {
-	// Create a map to hold the sprite sheets
-	spriteSheets := make(map[string]*ebiten.Image)
+	if len(g.CurrentScene.NPCs) == 0 {
 
-	// List of directions
-	directions := []string{"up", "down", "right", "left"}
+		// Create a map to hold the sprite sheets
+		spriteSheets := make(map[string]*ebiten.Image)
 
-	// Loop over the directions and load the corresponding sprite sheet
-	for _, direction := range directions {
-		// Construct the file path for the sprite sheet
-		// This assumes you have files named like "playerUp.png", "playerDown.png", etc.
-		if direction == "left" {
-			spriteSheets["left"] = spriteSheets["right"]
-			break
+		// List of directions
+		directions := []string{"up", "down", "right", "left"}
+
+		// Loop over the directions and load the corresponding sprite sheet
+		for _, direction := range directions {
+			// Construct the file path for the sprite sheet
+			// This assumes you have files named like "playerUp.png", "playerDown.png", etc.
+			if direction == "left" {
+				spriteSheets["left"] = spriteSheets["right"]
+				break
+			}
+			c := cases.Upper(language.English)
+			path := "assets/player" + c.String(direction) + "Blue" + ".png"
+
+			// Load the image
+			img, _, err := ebitenutil.NewImageFromFile(path)
+			if err != nil {
+				log.Fatalf("failed to load '%s' sprite sheet: %v", direction, err)
+			}
+
+			// Store the loaded image in the map
+			spriteSheets[direction] = img
 		}
-		c := cases.Upper(language.English)
-		path := "assets/player" + c.String(direction) + "Blue" + ".png"
 
-		// Load the image
-		img, _, err := ebitenutil.NewImageFromFile(path)
-		if err != nil {
-			log.Fatalf("failed to load '%s' sprite sheet: %v", direction, err)
-		}
-
-		// Store the loaded image in the map
-		spriteSheets[direction] = img
+		g.AddNPC(spriteSheets)
 	}
-
-	g.AddNPC(spriteSheets)
 }
 func loadObsnDoorss(g *Game) {
 	if len(g.CurrentScene.obstacles) == 0 {
@@ -773,7 +1173,7 @@ func NewGame() *Game {
 }
 func newDialogue() *Dialogue {
 	d := &Dialogue{
-		TextLines:     []string{"Lets go on a trip together! How much dialogue do you need?", "Liten up fella, I really hate doing this, but you kind of smell like rotten eggs took a piss in a toilet."},
+		TextLines:     []string{},
 		FramesPerChar: 2, // For example, one character every 2 frames
 		IsOpen:        false,
 		CurrentLine:   0,
