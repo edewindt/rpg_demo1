@@ -3,6 +3,7 @@ package main
 import (
 	"ebi/npc"
 	"ebi/player"
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/color"
@@ -59,12 +60,12 @@ type Vector2D struct {
 }
 
 type Cutscene struct {
-	Game          *Game
+	Game          *Game `json:"-"`
 	Actions       []CutsceneAction
 	Current       int
 	ActiveActions map[int]bool // Tracks active actions by their index
 	IsPlaying     bool
-	CleanUp       func(*Cutscene)
+	CleanUp       func(*Cutscene) `json:"-"`
 }
 
 type GameProgress struct {
@@ -76,17 +77,18 @@ type GameProgress struct {
 type Door struct {
 	Rect        *image.Rectangle
 	Id          string
-	Destination *Scene
+	Destination string
 	NewX, NewY  float64
 }
 
 type Scene struct {
-	Game                   *Game
+	Name                   string
+	Game                   *Game `json:"-"`
 	obstacles              []*image.Rectangle
 	doors                  []*Door
-	background, Foreground *ebiten.Image
-	loadObsnDoors          func(*Game)
-	loadNPCs               func(*Game)
+	Background, Foreground *ebiten.Image
+	loadObsnDoors          func(*Game) `json:"-"`
+	loadNPCs               func(*Game) `json:"-"`
 	NPCs                   []*npc.NPC
 }
 
@@ -106,10 +108,10 @@ type Game struct {
 	alpha                   float64 // For the fade effect (0.0: fully transparent, 1.0: fully opaque)
 	fadeSpeed               float64 // How fast the fade occurs
 	menuOptions             []string
-	Scenes                  []*Scene
+	Scenes                  map[string]*Scene
 	Progress                GameProgress
 	Cutscene                Cutscene
-	CurrentScene, NextScene *Scene
+	CurrentScene, NextScene string
 	CurrentDoor             *Door
 	selectedOption          int
 	keyPressCounter         map[ebiten.Key]int // Tracks duration of key presses
@@ -118,6 +120,47 @@ type Game struct {
 	// keyRPressedLastFrame    bool
 	dialogue *Dialogue
 	fface    font.Face
+	Full     bool
+}
+
+type SaveState struct {
+	PlayerDirection string
+	PlayerPosition  Vector2D
+	NPCPositions    []Vector2D
+	CurrentScene    string
+	GameProgress
+}
+
+func SaveGameState(state *SaveState, filename string) error {
+	fmt.Println(state)
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	if err := encoder.Encode(state); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func LoadGameState(filename string) (*SaveState, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var state SaveState
+	decoder := json.NewDecoder(file)
+	if err := decoder.Decode(&state); err != nil {
+		return nil, err
+	}
+
+	return &state, nil
 }
 
 func (g *Game) Update() error {
@@ -161,7 +204,7 @@ func (g *Game) Update() error {
 			}
 		}
 	} else if g.state == PlayState {
-		for _, cnpc := range g.CurrentScene.NPCs {
+		for _, cnpc := range g.Scenes[g.CurrentScene].NPCs {
 			if nearNPC(minX(g.player.X, g), minY(g.player.Y, g), cnpc.X, cnpc.Y) {
 				if ebiten.IsKeyPressed(ebiten.KeyZ) && !g.keyZPressedLastFrame {
 					// Toggle NPC interaction state
@@ -198,15 +241,15 @@ func (g *Game) Update() error {
 			g.dialogue.Update()
 
 		}
-		fmt.Println("Player:", g.player.X, g.player.Y)
-		fmt.Println("NPC:", g.CurrentScene.NPCs[0].X, g.CurrentScene.NPCs[0].Y)
+		// fmt.Println("Player:", g.player.X, g.player.Y)
+		// fmt.Println("NPC:", g.Scenes[g.CurrentScene].NPCs[0].X, g.Scenes[g.CurrentScene].NPCs[0].Y)
 		g.keyZPressedLastFrame = ebiten.IsKeyPressed(ebiten.KeyZ)
-		if g.Progress.HasMetNPCBryan && g.Progress.HasVisitedRedTown && !g.dialogue.IsOpen && !g.Progress.FirstCutSceneFinished && g.CurrentScene == g.Scenes[1] {
+		if g.Progress.HasMetNPCBryan && g.Progress.HasVisitedRedTown && !g.dialogue.IsOpen && !g.Progress.FirstCutSceneFinished && g.Scenes[g.CurrentScene] == g.Scenes["mainMapRed"] {
 			g.Cutscene = createExampleCutscene(g)
 			g.Cutscene.Start()
 			g.state = CutsceneState
 			// fmt.Println("Progress Attained")
-			// n := g.CurrentScene.NPCs[0]
+			// n := g.Scenes[g.CurrentScene].NPCs[0]
 			// p := g.player
 
 			// g.player.X = -500
@@ -232,8 +275,8 @@ func (g *Game) Update() error {
 			// 	t = true
 			// 	// g.player.X = g.CurrentDoor.NewX
 			// 	// g.player.Y = g.CurrentDoor.NewY
-			// 	// g.CurrentScene.loadObsnDoors(g)
-			// 	// g.CurrentScene.loadNPCs(g)
+			// 	// g.Scenes[g.CurrentScene].loadObsnDoors(g)
+			// 	// g.Scenes[g.CurrentScene].loadNPCs(g)
 			// } else if t {
 			// 	fmt.Println("Went Black")
 			// 	// Decrease the alpha for the fade in effect
@@ -286,7 +329,7 @@ func (g *Game) Update() error {
 		// 	fmt.Println(*g.obstacles[0])
 		// }
 
-		for _, obstacle := range g.CurrentScene.obstacles {
+		for _, obstacle := range g.Scenes[g.CurrentScene].obstacles {
 			obsMinX := float64(obstacle.Min.X)
 			obsMaxX := float64(obstacle.Max.X)
 			obsMinY := float64(obstacle.Min.Y)
@@ -297,7 +340,7 @@ func (g *Game) Update() error {
 				colliding = true
 			}
 		}
-		for _, door := range g.CurrentScene.doors {
+		for _, door := range g.Scenes[g.CurrentScene].doors {
 			obsMinX := float64(door.Rect.Min.X)
 			obsMaxX := float64(door.Rect.Max.X)
 			obsMinY := float64(door.Rect.Min.Y)
@@ -333,14 +376,27 @@ func (g *Game) Update() error {
 		// g.keyRPressedLastFrame = ebiten.IsKeyPressed(ebiten.KeyR)
 
 		if ebiten.IsKeyPressed(ebiten.KeyK) && !g.keyKPressedLastFrame {
-			g.Progress.FirstCutSceneFinished = !g.Progress.FirstCutSceneFinished
+			g.Full = !g.Full
+			ebiten.SetFullscreen(g.Full)
+			s := &SaveState{
+				PlayerPosition:  Vector2D{g.player.X, g.player.Y},
+				PlayerDirection: g.player.Direction,
+				CurrentScene:    g.CurrentScene,
+				GameProgress:    g.Progress,
+				NPCPositions:    []Vector2D{{X: g.Scenes[g.CurrentScene].NPCs[0].X, Y: g.Scenes[g.CurrentScene].NPCs[0].Y}},
+			}
+			err := SaveGameState(s, "savefile.json")
+			if err != nil {
+				log.Fatal(err)
+			}
+			// g.Progress.FirstCutSceneFinished = !g.Progress.FirstCutSceneFinished
 			// g.Progress.HasMetNPCBryan = false
 			// g.Progress.HasVisitedRedTown = false
 
-			// if g.CurrentScene == g.Scenes[0] {
-			// 	g.changeScene(g.Scenes[0], g.Scenes[1])
+			// if g.CurrentScene == g.Scenes["mainMap"] {
+			// 	g.changeScene(g.Scenes["mainMap"], g.Scenes["mainMapRed"])
 			// } else {
-			// 	g.changeScene(g.Scenes[1], g.Scenes[0])
+			// 	g.changeScene(g.Scenes["mainMapRed"], g.Scenes["mainMap"])
 			// }
 
 		}
@@ -384,8 +440,8 @@ func (g *Game) Update() error {
 			g.changeScene(g.CurrentScene, g.CurrentDoor.Destination)
 			g.player.X = g.CurrentDoor.NewX
 			g.player.Y = g.CurrentDoor.NewY
-			g.CurrentScene.loadObsnDoors(g)
-			g.CurrentScene.loadNPCs(g)
+			g.Scenes[g.CurrentScene].loadObsnDoors(g)
+			g.Scenes[g.CurrentScene].loadNPCs(g)
 		}
 	} else if g.state == NewSceneState {
 		// Decrease the alpha for the fade in effect
@@ -404,9 +460,10 @@ func (g *Game) Update() error {
 }
 func CleanUpCutScene1(c *Cutscene) {
 	c.IsPlaying = false
-	c.Game.CurrentScene.NPCs[0].X = -900
-	c.Game.CurrentScene.NPCs[0].Y = -950
-
+	c.Game.Scenes[c.Game.CurrentScene].NPCs[0].X = -900
+	c.Game.Scenes[c.Game.CurrentScene].NPCs[0].Y = -950
+	c.Game.Scenes[c.Game.CurrentScene].NPCs[0].Direction = "left"
+	c.Game.state = PlayState
 	c.Game.Progress.FirstCutSceneFinished = true
 	fmt.Println("finished")
 }
@@ -513,7 +570,6 @@ func (c *Cutscene) processAction(action CutsceneAction) bool {
 		} else {
 			g := c.Game
 			if ebiten.IsKeyPressed(ebiten.KeyZ) && !g.keyZPressedLastFrame {
-				fmt.Println("Pressed Z")
 				if d.Finished {
 					d.NextLine()
 					if !d.IsOpen {
@@ -535,7 +591,7 @@ func (c *Cutscene) processAction(action CutsceneAction) bool {
 }
 
 func moveTowards(entity interface{}, target Vector2D) bool {
-	const speed = 1.0
+	const speed = 5.0
 	res := false
 	switch e := entity.(type) {
 	case *player.Player:
@@ -574,7 +630,7 @@ func moveTowards(entity interface{}, target Vector2D) bool {
 			e.Direction = "up"
 			e.Y += speed
 		} else {
-			e.CurrentFrame = 2
+			// e.CurrentFrame = 2
 			res = true
 		}
 		e.TickCount++
@@ -606,7 +662,7 @@ func createExampleCutscene(g *Game) Cutscene {
 			},
 			{
 				ActionType:   TeleportNPC,
-				Target:       g.CurrentScene.NPCs[0],
+				Target:       g.Scenes[g.CurrentScene].NPCs[0],
 				Data:         Vector2D{X: 150 - 600, Y: 150 - 400},
 				WaitPrevious: true,
 			},
@@ -623,13 +679,13 @@ func createExampleCutscene(g *Game) Cutscene {
 			},
 			{
 				ActionType:   MoveNPC,
-				Target:       g.CurrentScene.NPCs[0],
+				Target:       g.Scenes[g.CurrentScene].NPCs[0],
 				Data:         Vector2D{X: -150 - 600, Y: -150 - 400}, // Target position for NPC
 				WaitPrevious: false,
 			},
 			{
 				ActionType:   TurnNPC,
-				Target:       g.CurrentScene.NPCs[0],
+				Target:       g.Scenes[g.CurrentScene].NPCs[0],
 				Data:         "left",
 				WaitPrevious: true,
 			},
@@ -788,7 +844,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		bgOpts := &ebiten.DrawImageOptions{}
 		bgOpts.GeoM.Translate(g.player.X, g.player.Y)
 		bgOpts.GeoM.Scale(scale, scale)
-		screen.DrawImage(g.CurrentScene.background, bgOpts)
+		screen.DrawImage(g.Scenes[g.CurrentScene].Background, bgOpts)
 		currentSpriteSheet := g.player.SpriteSheets[g.player.Direction]
 		// 	// Determine the x, y location of the current frame on the sprite sheet
 		sx := (g.player.CurrentFrame % (currentSpriteSheet.Bounds().Dx() / g.player.FrameWidth)) * g.player.FrameWidth
@@ -814,11 +870,11 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		charX := float64(screenWidth)/2 - float64(charWidth)/4
 		charY := float64(screenHeight)/2 - float64(charHeight)/4
 		opts.GeoM.Translate(charX, charY)
-		for _, cnpc := range g.CurrentScene.NPCs {
-			cnpc.Draw(screen, g.player.X, g.player.Y)
+		for _, cnpc := range g.Scenes[g.CurrentScene].NPCs {
+			cnpc.Draw(screen, g.player.X, g.player.Y, scale)
 		}
 		screen.DrawImage(frame, opts)
-		screen.DrawImage(g.CurrentScene.Foreground, bgOpts)
+		screen.DrawImage(g.Scenes[g.CurrentScene].Foreground, bgOpts)
 		g.dialogue.Draw(screen, g)
 
 	} else if g.state == TransitionState || g.state == NewSceneState {
@@ -826,7 +882,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		bgOpts := &ebiten.DrawImageOptions{}
 		bgOpts.GeoM.Translate(g.player.X, g.player.Y)
 		bgOpts.GeoM.Scale(scale, scale)
-		screen.DrawImage(g.CurrentScene.background, bgOpts)
+		screen.DrawImage(g.Scenes[g.CurrentScene].Background, bgOpts)
 		currentSpriteSheet := g.player.SpriteSheets[g.player.Direction]
 		// 	// Determine the x, y location of the current frame on the sprite sheet
 		sx := (g.player.CurrentFrame % (currentSpriteSheet.Bounds().Dx() / g.player.FrameWidth)) * g.player.FrameWidth
@@ -853,7 +909,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		charY := float64(screenHeight)/2 - float64(charHeight)/4
 		opts.GeoM.Translate(charX, charY)
 		screen.DrawImage(frame, opts)
-		screen.DrawImage(g.CurrentScene.Foreground, bgOpts)
+		screen.DrawImage(g.Scenes[g.CurrentScene].Foreground, bgOpts)
 
 		// Draw the fade rectangle
 		fadeImage := ebiten.NewImage(screen.Bounds().Dx(), screen.Bounds().Dy())
@@ -865,7 +921,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		bgOpts := &ebiten.DrawImageOptions{}
 		bgOpts.GeoM.Translate(g.player.X, g.player.Y)
 		bgOpts.GeoM.Scale(scale, scale)
-		screen.DrawImage(g.CurrentScene.background, bgOpts)
+		screen.DrawImage(g.Scenes[g.CurrentScene].Background, bgOpts)
 		currentSpriteSheet := g.player.SpriteSheets[g.player.Direction]
 		// 	// Determine the x, y location of the current frame on the sprite sheet
 		sx := (g.player.CurrentFrame % (currentSpriteSheet.Bounds().Dx() / g.player.FrameWidth)) * g.player.FrameWidth
@@ -891,11 +947,11 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		charX := float64(screenWidth)/2 - float64(charWidth)/4
 		charY := float64(screenHeight)/2 - float64(charHeight)/4
 		opts.GeoM.Translate(charX, charY)
-		for _, cnpc := range g.CurrentScene.NPCs {
-			cnpc.Draw(screen, g.player.X, g.player.Y)
+		for _, cnpc := range g.Scenes[g.CurrentScene].NPCs {
+			cnpc.Draw(screen, g.player.X, g.player.Y, scale)
 		}
 		screen.DrawImage(frame, opts)
-		screen.DrawImage(g.CurrentScene.Foreground, bgOpts)
+		screen.DrawImage(g.Scenes[g.CurrentScene].Foreground, bgOpts)
 		g.dialogue.Draw(screen, g)
 		fadeImage := ebiten.NewImage(screen.Bounds().Dx(), screen.Bounds().Dy())
 		fadeColor := color.RGBA{0, 0, 0, uint8(g.alpha * 0xff)} // Black with variable alpha
@@ -954,9 +1010,9 @@ func loadBackground(foregroundPath, backgroundPath string) (*ebiten.Image, *ebit
 
 func (g *Game) AddObstacle(x1, y1, x2, y2 int) {
 	i := image.Rect(x1, y1, x2, y2)
-	g.CurrentScene.obstacles = append(g.CurrentScene.obstacles, &i)
+	g.Scenes[g.CurrentScene].obstacles = append(g.Scenes[g.CurrentScene].obstacles, &i)
 }
-func (g *Game) AddDoor(x1, y1, x2, y2 int, dest *Scene, id string, newX, newY float64) {
+func (g *Game) AddDoor(x1, y1, x2, y2 int, dest, id string, newX, newY float64) {
 	i := image.Rect(x1, y1, x2, y2)
 	d := &Door{
 		Rect:        &i,
@@ -965,10 +1021,11 @@ func (g *Game) AddDoor(x1, y1, x2, y2 int, dest *Scene, id string, newX, newY fl
 		NewX:        newX,
 		NewY:        newY,
 	}
-	g.CurrentScene.doors = append(g.CurrentScene.doors, d)
+	g.Scenes[g.CurrentScene].doors = append(g.Scenes[g.CurrentScene].doors, d)
 }
-func (g *Game) AddNPC(spriteSheets map[string]*ebiten.Image) {
+func (g *Game) AddNPC(spriteSheets map[string]*ebiten.Image, name string) {
 	n := &npc.NPC{
+		Name:             name,
 		X:                -900,
 		Y:                -950,
 		FrameWidth:       192 / 4, // The width of a single frame
@@ -983,33 +1040,35 @@ func (g *Game) AddNPC(spriteSheets map[string]*ebiten.Image) {
 		InteractionState: npc.NoInteraction,
 		DialogueText:     []string{"Lets go on a trip together! How much dialogue do you need?", "Liten up fella, I really hate doing this, but you kind of smell like rotten eggs took a piss in a toilet."},
 	}
-	g.CurrentScene.NPCs = append(g.CurrentScene.NPCs, n)
+	g.Scenes[g.CurrentScene].NPCs = append(g.Scenes[g.CurrentScene].NPCs, n)
 }
 func newScene(foreground *ebiten.Image, background *ebiten.Image, fn, fn2 func(*Game)) *Scene {
 	return &Scene{
 		Foreground:    foreground,
-		background:    background,
+		Background:    background,
 		loadObsnDoors: fn,
 		loadNPCs:      fn2,
 	}
 }
 func (g *Game) loadScenes() {
+	m := make(map[string]*Scene)
 	bg1, fg1 := loadBackground("assets/mainMap.png", "assets/over.png")
 	bg2, fg2 := loadBackground("assets/mainMapRed.png", "assets/overRed.png")
 	mainScene := newScene(bg1, fg1, loadObsnDoorss, loadNPCBryan)
 	secondScene := newScene(bg2, fg2, loadObsnDoors2, loadNPCBryan)
 	mainScene.Game = g
 	secondScene.Game = g
-	g.Scenes = append(g.Scenes, mainScene)
-	g.Scenes = append(g.Scenes, secondScene)
-	g.CurrentScene = mainScene
+	g.Scenes = m
+
+	m["mainMap"] = mainScene
+	m["mainMapRed"] = secondScene
 }
 
-func (g *Game) changeScene(from *Scene, to *Scene) {
+func (g *Game) changeScene(from string, to string) {
 	g.CurrentScene = to
 }
 func loadNPCBryan(g *Game) {
-	if len(g.CurrentScene.NPCs) == 0 {
+	if len(g.Scenes[g.CurrentScene].NPCs) == 0 {
 
 		// Create a map to hold the sprite sheets
 		spriteSheets := make(map[string]*ebiten.Image)
@@ -1038,11 +1097,45 @@ func loadNPCBryan(g *Game) {
 			spriteSheets[direction] = img
 		}
 
-		g.AddNPC(spriteSheets)
+		g.AddNPC(spriteSheets, "Bryan")
 	}
 }
 func loadObsnDoorss(g *Game) {
-	if len(g.CurrentScene.obstacles) == 0 {
+	if len(g.Scenes[g.CurrentScene].obstacles) == 0 {
+		g.AddObstacle(2075, 432, 1850, 604) // House Collision
+		g.AddObstacle(956, 630, 1430, 855)
+		g.AddObstacle(2340, 432, 2550, 604)
+		g.AddObstacle(540, 715, 620, 800) // Tree Collision
+		g.AddObstacle(580, 520, 660, 610)
+		g.AddObstacle(680, 950, 755, 1040)
+		g.AddObstacle(920, 430, 1000, 515)
+		g.AddObstacle(1495, 430, 1575, 515)
+		g.AddObstacle(875, 665, 955, 745)
+		g.AddObstacle(1160, 815, 1235, 900)
+		g.AddObstacle(1210, 485, 1290, 565)
+		g.AddObstacle(1680, 485, 1765, 565)
+		g.AddObstacle(1495, 435, 1575, 515)
+		g.AddObstacle(1450, 670, 1530, 750)
+		g.AddObstacle(2260, 465, 2350, 550)
+		g.AddObstacle(2555, 465, 2640, 550)
+		g.AddObstacle(815, 1240, 2410, 1295) //Land boundary Collision
+		g.AddObstacle(575, 305, 2520, 335)
+		g.AddObstacle(975, 1060, 2520, 1100) //Fence Collision
+		g.AddObstacle(1415, 930, 1895, 955)
+		g.AddObstacle(2030, 930, 2380, 955)
+		g.AddObstacle(2830, 645, 3060, 670) // Port Collisions
+		g.AddObstacle(2835, 815, 3060, 835)
+		g.AddObstacle(3060, 670, 3085, 815)
+		g.AddObstacle(2170, 705, 2300, 850)                           // Pond Collisions
+		g.AddDoor(1000, 840, 1095, 945, "mainMapRed", "fd", -140, 20) // Door Collisions
+		g.AddDoor(1290, 840, 1390, 945, "mainMapRed", "sd", -1000, -1000)
+		g.AddDoor(1915, 600, 2015, 710, "mainMapRed", "td", -1500, -1500)
+		g.AddDoor(2400, 600, 2495, 710, "mainMapRed", "ffd", -700, -700)
+	}
+
+}
+func loadObsnDoors2(g *Game) {
+	if len(g.Scenes[g.CurrentScene].obstacles) == 0 {
 		g.AddObstacle(2075, 432, 1850, 604) // House Collision
 		g.AddObstacle(956, 630, 1430, 855)
 		g.AddObstacle(2340, 432, 2550, 604)
@@ -1068,44 +1161,10 @@ func loadObsnDoorss(g *Game) {
 		g.AddObstacle(2835, 815, 3060, 835)
 		g.AddObstacle(3060, 670, 3085, 815)
 		g.AddObstacle(2170, 705, 2300, 850)                          // Pond Collisions
-		g.AddDoor(1000, 840, 1095, 945, g.Scenes[1], "fd", -140, 20) // Door Collisions
-		g.AddDoor(1290, 840, 1390, 945, g.Scenes[1], "sd", -1000, -1000)
-		g.AddDoor(1915, 600, 2015, 710, g.Scenes[1], "td", -1500, -1500)
-		g.AddDoor(2400, 600, 2495, 710, g.Scenes[1], "ffd", -700, -700)
-	}
-
-}
-func loadObsnDoors2(g *Game) {
-	if len(g.CurrentScene.obstacles) == 0 {
-		g.AddObstacle(2075, 432, 1850, 604) // House Collision
-		g.AddObstacle(956, 630, 1430, 855)
-		g.AddObstacle(2340, 432, 2550, 604)
-		g.AddObstacle(540, 715, 620, 800) // Tree Collision
-		g.AddObstacle(580, 520, 660, 610)
-		g.AddObstacle(680, 950, 755, 1040)
-		g.AddObstacle(920, 430, 1000, 515)
-		g.AddObstacle(1495, 430, 1575, 515)
-		g.AddObstacle(875, 665, 955, 745)
-		g.AddObstacle(1160, 815, 1235, 900)
-		g.AddObstacle(1210, 485, 1290, 565)
-		g.AddObstacle(1680, 485, 1765, 565)
-		g.AddObstacle(1495, 435, 1575, 515)
-		g.AddObstacle(1450, 670, 1530, 750)
-		g.AddObstacle(2260, 465, 2350, 550)
-		g.AddObstacle(2555, 465, 2640, 550)
-		g.AddObstacle(815, 1240, 2410, 1295) //Land boundary Collision
-		g.AddObstacle(575, 305, 2520, 335)
-		g.AddObstacle(975, 1060, 2520, 1100) //Fence Collision
-		g.AddObstacle(1415, 930, 1895, 955)
-		g.AddObstacle(2030, 930, 2380, 955)
-		g.AddObstacle(2830, 645, 3060, 670) // Port Collisions
-		g.AddObstacle(2835, 815, 3060, 835)
-		g.AddObstacle(3060, 670, 3085, 815)
-		g.AddObstacle(2170, 705, 2300, 850)                            // Pond Collisions
-		g.AddDoor(1000, 840, 1095, 945, g.Scenes[0], "fd", -500, -500) // Door Collisions
-		g.AddDoor(1290, 840, 1390, 945, g.Scenes[0], "sd", -1000, -1000)
-		g.AddDoor(1915, 600, 2015, 710, g.Scenes[0], "td", -1500, -1500)
-		g.AddDoor(2400, 600, 2495, 710, g.Scenes[0], "ffd", -700, -700)
+		g.AddDoor(1000, 840, 1095, 945, "mainMap", "fd", -500, -500) // Door Collisions
+		g.AddDoor(1290, 840, 1390, 945, "mainMap", "sd", -1000, -1000)
+		g.AddDoor(1915, 600, 2015, 710, "mainMap", "td", -1500, -1500)
+		g.AddDoor(2400, 600, 2495, 710, "mainMap", "ffd", -700, -700)
 	}
 
 }
@@ -1162,8 +1221,9 @@ func NewGame() *Game {
 		},
 	}
 	g.loadScenes()
-	g.CurrentScene.loadObsnDoors(g)
-	g.CurrentScene.loadNPCs(g)
+	g.CurrentScene = "mainMap"
+	g.Scenes[g.CurrentScene].loadObsnDoors(g)
+	g.Scenes[g.CurrentScene].loadNPCs(g)
 	g.dialogue = newDialogue()
 	// g.AddObstacle(0, 0, 300, 300)       // Debug collision box
 
@@ -1183,7 +1243,47 @@ func newDialogue() *Dialogue {
 
 }
 func main() {
-	game := NewGame()
+	var game *Game
+	if savedStateExists("savefile.json") {
+		gameState, err := LoadGameState("savefile.json")
+		if err != nil {
+			log.Fatalf("Failed to load saved game: %v", err)
+		}
+		f, err := loadFontFace()
+		spriteSheets := loadSpriteSheets()
+		if err != nil {
+			log.Fatal(err)
+		}
+		game =
+			&Game{
+				CurrentScene:   gameState.CurrentScene,
+				Progress:       gameState.GameProgress,
+				state:          PlayState,
+				fface:          f,
+				menuOptions:    []string{"Start Game", "Options", "Exit"},
+				selectedOption: 0,
+				alpha:          0.0,
+				fadeSpeed:      0.05,
+				player: &player.Player{
+					X:            gameState.PlayerPosition.X,
+					Y:            gameState.PlayerPosition.Y,
+					FrameWidth:   192 / 4, // The width of a single frame
+					FrameHeight:  68,      // The height of a single frame
+					FrameCount:   4,       // The total number of frames in the sprite sheet
+					SpriteSheets: spriteSheets,
+					Direction:    gameState.PlayerDirection, // Default direction
+					Speed:        7.0,
+					CanMove:      true,
+				},
+			}
+		game.loadScenes()
+		game.Scenes[game.CurrentScene].loadObsnDoors(game)
+		game.Scenes[game.CurrentScene].loadNPCs(game)
+		game.dialogue = newDialogue()
+	} else {
+		game = NewGame()
+	}
+
 	// Configuration settings
 	ebiten.SetWindowSize(640, 480)
 	ebiten.SetWindowTitle("Sprite Animation")
@@ -1192,4 +1292,9 @@ func main() {
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func savedStateExists(filename string) bool {
+	_, err := os.Stat(filename)
+	return !os.IsNotExist(err)
 }

@@ -17,6 +17,7 @@ const (
 )
 
 type NPC struct {
+	Name             string
 	FrameWidth       int
 	FrameHeight      int
 	FrameCount       int
@@ -45,7 +46,7 @@ func (npc *NPC) Move(dir string) {
 	case "down":
 		npc.Y -= npc.Speed // Move down
 	}
-
+	npc.TickCount++
 }
 
 func (npc *NPC) Update(interactionKey ebiten.Key) {
@@ -87,10 +88,14 @@ func (npc *NPC) Update(interactionKey ebiten.Key) {
 	} else if npc.InteractionState == CutSceneInteraction {
 		fmt.Println("In a cutscene")
 	}
+
+	if npc.TickCount >= 10 {
+		npc.CurrentFrame = (npc.CurrentFrame + 1) % npc.FrameCount
+		npc.TickCount = 0 // Reset the tick count
+	}
 }
 
-func (npc *NPC) Draw(screen *ebiten.Image, pX, pY float64) {
-	scale := 0.25
+func (npc *NPC) Draw(screen *ebiten.Image, pX, pY float64, scale float64) {
 	currentSpriteSheet := npc.SpriteSheets[npc.Direction]
 
 	// 	// Determine the x, y location of the current frame on the sprite sheet
