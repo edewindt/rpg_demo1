@@ -1012,6 +1012,16 @@ func (g *Game) AddObstacle(x1, y1, x2, y2 int) {
 	i := image.Rect(x1, y1, x2, y2)
 	g.Scenes[g.CurrentScene].obstacles = append(g.Scenes[g.CurrentScene].obstacles, &i)
 }
+func (g *Game) AddAirTightDiagonalObstacles(startX, startY, width, height, count int) {
+	for i := 0; i < count; i++ {
+		x1 := startX + (width * i)
+		y1 := startY + (height * i)
+		x2 := x1 + width
+		y2 := y1 + height
+		g.AddObstacle(x1, y1, x2, y2)
+	}
+}
+
 func (g *Game) AddDoor(x1, y1, x2, y2 int, dest, id string, newX, newY float64) {
 	i := image.Rect(x1, y1, x2, y2)
 	d := &Door{
@@ -1118,6 +1128,8 @@ func loadObsnDoorss(g *Game) {
 		g.AddObstacle(1450, 670, 1530, 750)
 		g.AddObstacle(2260, 465, 2350, 550)
 		g.AddObstacle(2555, 465, 2640, 550)
+		g.AddAirTightDiagonalObstacles(275, 780, 30, 30, 10)
+		g.AddAirTightDiagonalObstacles(615, 1070, 30, 30, 7)
 		g.AddObstacle(815, 1240, 2410, 1295) //Land boundary Collision
 		g.AddObstacle(575, 305, 2520, 335)
 		g.AddObstacle(975, 1060, 2520, 1100) //Fence Collision
