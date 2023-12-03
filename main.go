@@ -1130,6 +1130,9 @@ func loadObsnDoorss(g *Game) {
 		g.AddObstacle(2555, 465, 2640, 550)
 		g.AddAirTightDiagonalObstacles(275, 780, 30, 30, 10)
 		g.AddAirTightDiagonalObstacles(615, 1070, 30, 30, 7)
+		g.AddAirTightDiagonalObstacles(250, 665, 30, -30, 10)
+		g.AddAirTightDiagonalObstacles(2400, 1270, 30, -30, 13)
+		g.AddAirTightDiagonalObstacles(2515, 355, 30, 30, 10)
 		g.AddObstacle(815, 1240, 2410, 1295) //Land boundary Collision
 		g.AddObstacle(575, 305, 2520, 335)
 		g.AddObstacle(975, 1060, 2520, 1100) //Fence Collision
@@ -1164,6 +1167,11 @@ func loadObsnDoors2(g *Game) {
 		g.AddObstacle(1450, 670, 1530, 750)
 		g.AddObstacle(2260, 465, 2350, 550)
 		g.AddObstacle(2555, 465, 2640, 550)
+		g.AddAirTightDiagonalObstacles(275, 780, 30, 30, 10)
+		g.AddAirTightDiagonalObstacles(615, 1070, 30, 30, 7)
+		g.AddAirTightDiagonalObstacles(250, 665, 30, -30, 10)
+		g.AddAirTightDiagonalObstacles(2400, 1270, 30, -30, 13)
+		g.AddAirTightDiagonalObstacles(2515, 355, 30, 30, 10)
 		g.AddObstacle(815, 1240, 2410, 1295) //Land boundary Collision
 		g.AddObstacle(575, 305, 2520, 335)
 		g.AddObstacle(975, 1060, 2520, 1100) //Fence Collision
