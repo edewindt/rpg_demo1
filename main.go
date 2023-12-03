@@ -248,45 +248,11 @@ func (g *Game) Update() error {
 			g.Cutscene = createExampleCutscene(g)
 			g.Cutscene.Start()
 			g.state = CutsceneState
-			// fmt.Println("Progress Attained")
-			// n := g.Scenes[g.CurrentScene].NPCs[0]
-			// p := g.player
-
-			// g.player.X = -500
-			// g.player.Y = -500
-			// if nearNPC(minX(g.player.X, g), minY(g.player.Y, g), n.X, n.Y) {
-			// 	n.IsStopped = true
-			// 	n.StopTimer = 100
-			// }
-			// p.X += p.Speed
-			// p.Y += p.Speed
-			// n.X += n.Speed
-			// n.Y += n.Speed
-			// // n.X =
-			// // n.Y =
-			// // p.CanMove = false
-			// p.Direction = "left"
-			// p.CurrentFrame = 1
-			// g.Progress.FirstCutSceneFinished = true
-			// t := false
-			// g.alpha += g.fadeSpeed
-			// if g.alpha >= 1.0 {
-			// 	g.alpha = 1.0
-			// 	t = true
-			// 	// g.player.X = g.CurrentDoor.NewX
-			// 	// g.player.Y = g.CurrentDoor.NewY
-			// 	// g.Scenes[g.CurrentScene].loadObsnDoors(g)
-			// 	// g.Scenes[g.CurrentScene].loadNPCs(g)
-			// } else if t {
-			// 	fmt.Println("Went Black")
-			// 	// Decrease the alpha for the fade in effect
-			// 	g.alpha -= g.fadeSpeed
-			// 	if g.alpha <= 0.0 {
-			// 		g.alpha = 0.0
-			// 		g.state = PlayState
-			// 		// The new scene is fully visible now, and game continues as normal
-			// 	}
-			// }
+		}
+		if ebiten.IsKeyPressed(ebiten.KeyG) {
+			g.player.GhostMode = true
+		} else {
+			g.player.GhostMode = false
 		}
 		colliding := false
 		movementKeyPressed := false
@@ -860,7 +826,10 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			opts.GeoM.Scale(-1, 1)                               // Flip horizontally
 			opts.GeoM.Translate(float64(g.player.FrameWidth), 0) // Adjust the position after flipping
 		}
-
+		if g.player.GhostMode {
+			var alpha float32 = 0.5
+			opts.ColorScale.Scale(1, 1, 1, alpha)
+		}
 		opts.GeoM.Scale(scale, scale)
 		//Draw Character at the center of the screen
 		screenWidth := screen.Bounds().Dx()

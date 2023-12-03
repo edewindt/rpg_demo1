@@ -13,6 +13,7 @@ type Player struct {
 	Direction    string
 	Speed        float64
 	CanMove      bool
+	GhostMode    bool
 }
 
 func (p Player) CheckMove(dir string) (float64, float64) {
