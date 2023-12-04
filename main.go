@@ -32,6 +32,7 @@ const (
 	TransitionState
 	NewSceneState
 	CutsceneState
+	TimeStopped
 )
 
 type CutsceneActionType int
@@ -398,7 +399,9 @@ func (g *Game) Update() error {
 		// 	g.dialogue.Update()
 		// }
 		// g.keyRPressedLastFrame = ebiten.IsKeyPressed(ebiten.KeyR)
-
+		if ebiten.IsKeyPressed(ebiten.KeyS) {
+			g.state = TimeStopped
+		}
 		if ebiten.IsKeyPressed(ebiten.KeyK) && !g.keyKPressedLastFrame {
 			g.Full = !g.Full
 			ebiten.SetFullscreen(g.Full)
@@ -480,6 +483,10 @@ func (g *Game) Update() error {
 		g.Cutscene.Update()
 
 		g.keyZPressedLastFrame = ebiten.IsKeyPressed(ebiten.KeyZ)
+	} else if g.state == TimeStopped {
+		if !ebiten.IsKeyPressed(ebiten.KeyS) {
+			g.state = PlayState
+		}
 	}
 	return nil
 }
@@ -989,6 +996,44 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		fadeColor := color.RGBA{0, 0, 0, uint8(g.alpha * 0xff)} // Black with variable alpha
 		fadeImage.Fill(fadeColor)
 		screen.DrawImage(fadeImage, nil)
+	} else if g.state == TimeStopped {
+		scale := 0.25
+		bgOpts := &ebiten.DrawImageOptions{}
+		bgOpts.ColorScale.Scale(.5, .5, .5, 1)
+		bgOpts.GeoM.Translate(g.player.X, g.player.Y)
+		bgOpts.GeoM.Scale(scale, scale)
+		screen.DrawImage(g.Scenes[g.CurrentScene].Background, bgOpts)
+		currentSpriteSheet := g.player.SpriteSheets[g.player.Direction]
+		// 	// Determine the x, y location of the current frame on the sprite sheet
+		sx := (g.player.CurrentFrame % (currentSpriteSheet.Bounds().Dx() / g.player.FrameWidth)) * g.player.FrameWidth
+		sy := (g.player.CurrentFrame / (currentSpriteSheet.Bounds().Dx() / g.player.FrameWidth)) * g.player.FrameHeight
+
+		// 	// Create a sub-image that represents the current frame
+		frame := currentSpriteSheet.SubImage(image.Rect(sx, sy, sx+g.player.FrameWidth, sy+g.player.FrameHeight)).(*ebiten.Image)
+
+		// Draw the sub-image on the screen
+		opts := &ebiten.DrawImageOptions{}
+		// If the direction is left, flip the image on the vertical axis
+		if g.player.Direction == "left" {
+			opts.GeoM.Scale(-1, 1)                               // Flip horizontally
+			opts.GeoM.Translate(float64(g.player.FrameWidth), 0) // Adjust the position after flipping
+		}
+
+		opts.GeoM.Scale(scale, scale)
+		//Draw Character at the center of the screen
+		screenWidth := screen.Bounds().Dx()
+		screenHeight := screen.Bounds().Dy()
+		charWidth := frame.Bounds().Dx()
+		charHeight := frame.Bounds().Dy()
+		charX := float64(screenWidth)/2 - float64(charWidth)/4
+		charY := float64(screenHeight)/2 - float64(charHeight)/4
+		opts.GeoM.Translate(charX, charY)
+		for _, cnpc := range g.Scenes[g.CurrentScene].NPCs {
+			cnpc.Draw(screen, g.player.X, g.player.Y, scale)
+		}
+		screen.DrawImage(frame, opts)
+		screen.DrawImage(g.Scenes[g.CurrentScene].Foreground, bgOpts)
+
 	}
 
 }
