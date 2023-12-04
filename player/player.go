@@ -21,11 +21,11 @@ type Player struct {
 	GhostMode         bool
 	GhostModeMeter    float64 // Time remaining in ghost mode
 	GhostModeCooldown float64 // Cooldown time before it can be activated again
-
-	KeyBeingPressed  bool // Whether the key is currently being pressed
-	IsRunning        bool
-	TickCounter      uint64 // Manually track the tick count
-	LastKeyPressTick uint64 // Tick count of the last key press
+	DoubleTapKey      ebiten.Key
+	KeyBeingPressed   bool // Whether the key is currently being pressed
+	IsRunning         bool
+	TickCounter       uint64 // Manually track the tick count
+	LastKeyPressTick  uint64 // Tick count of the last key press
 }
 
 func (p Player) CheckMove(dir string) (float64, float64) {

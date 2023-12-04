@@ -275,7 +275,7 @@ func (g *Game) Update() error {
 		if g.player.CanMove {
 			// Handle player movement
 			if ebiten.IsKeyPressed(ebiten.KeyLeft) {
-
+				g.player.DoubleTapKey = ebiten.KeyLeft
 				if !g.player.KeyBeingPressed {
 					fmt.Println(g.player.TickCounter)
 					// Key is pressed for the first time or after being released
@@ -285,16 +285,6 @@ func (g *Game) Update() error {
 					}
 					g.player.LastKeyPressTick = g.player.TickCounter
 				}
-				// } else {
-				// 	if g.player.KeyBeingPressed {
-				// 		// Key has been released
-				// 		g.player.KeyBeingPressed = false
-				// 		g.player.LastKeyPressTick = g.player.TickCounter
-				// 	} else if g.player.IsRunning {
-				// 		// Reset the double tap detection once the key is released
-				// 		g.player.IsRunning = false
-				// 	}
-				// }
 				X, Y := g.player.CheckMove("left")
 				g.player.Direction = "left"
 				moveX = X
@@ -302,13 +292,34 @@ func (g *Game) Update() error {
 				movementKeyPressed = true
 			}
 			if ebiten.IsKeyPressed(ebiten.KeyRight) {
+				g.player.DoubleTapKey = ebiten.KeyRight
+				if !g.player.KeyBeingPressed {
+					fmt.Println(g.player.TickCounter)
+					// Key is pressed for the first time or after being released
+					g.player.KeyBeingPressed = true
+					if g.player.TickCounter-g.player.LastKeyPressTick <= 30 && g.player.TickCounter-g.player.LastKeyPressTick > 0 {
+						g.player.IsRunning = true
+					}
+					g.player.LastKeyPressTick = g.player.TickCounter
+				}
 				X, Y := g.player.CheckMove("right")
 				g.player.Direction = "right"
 				moveX = X
 				moveY = Y
 				movementKeyPressed = true
+
 			}
 			if ebiten.IsKeyPressed(ebiten.KeyUp) {
+				g.player.DoubleTapKey = ebiten.KeyUp
+				if !g.player.KeyBeingPressed {
+					fmt.Println(g.player.TickCounter)
+					// Key is pressed for the first time or after being released
+					g.player.KeyBeingPressed = true
+					if g.player.TickCounter-g.player.LastKeyPressTick <= 30 && g.player.TickCounter-g.player.LastKeyPressTick > 0 {
+						g.player.IsRunning = true
+					}
+					g.player.LastKeyPressTick = g.player.TickCounter
+				}
 				X, Y := g.player.CheckMove("up")
 				g.player.Direction = "up"
 				moveX = X
@@ -316,6 +327,16 @@ func (g *Game) Update() error {
 				movementKeyPressed = true
 			}
 			if ebiten.IsKeyPressed(ebiten.KeyDown) {
+				g.player.DoubleTapKey = ebiten.KeyDown
+				if !g.player.KeyBeingPressed {
+					fmt.Println(g.player.TickCounter)
+					// Key is pressed for the first time or after being released
+					g.player.KeyBeingPressed = true
+					if g.player.TickCounter-g.player.LastKeyPressTick <= 30 && g.player.TickCounter-g.player.LastKeyPressTick > 0 {
+						g.player.IsRunning = true
+					}
+					g.player.LastKeyPressTick = g.player.TickCounter
+				}
 				X, Y := g.player.CheckMove("down")
 				g.player.Direction = "down"
 				moveX = X
@@ -323,7 +344,7 @@ func (g *Game) Update() error {
 				movementKeyPressed = true
 			}
 		}
-		g.player.KeyBeingPressed = ebiten.IsKeyPressed(ebiten.KeyLeft)
+		g.player.KeyBeingPressed = ebiten.IsKeyPressed(g.player.DoubleTapKey)
 		if g.player.IsRunning && !g.player.KeyBeingPressed {
 			g.player.IsRunning = false
 		}
