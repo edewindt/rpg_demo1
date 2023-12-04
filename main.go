@@ -249,10 +249,24 @@ func (g *Game) Update() error {
 			g.Cutscene.Start()
 			g.state = CutsceneState
 		}
-		if ebiten.IsKeyPressed(ebiten.KeyG) {
+		if ebiten.IsKeyPressed(ebiten.KeyG) && g.player.GhostModeCooldown <= 0 {
 			g.player.GhostMode = true
 		} else {
 			g.player.GhostMode = false
+		}
+		if g.player.GhostMode {
+			g.player.GhostModeMeter -= 1
+			if g.player.GhostModeMeter <= 0 {
+				g.player.GhostMode = false
+				g.player.GhostModeCooldown = 600 // 600 frames, 10 seconds
+			}
+		} else if g.player.GhostModeCooldown > 0 {
+			g.player.GhostModeCooldown -= 1
+			if g.player.GhostModeCooldown <= 0 {
+				fmt.Println("Ghost Mode Returned!")
+				g.player.GhostModeMeter = 600
+			}
+			fmt.Println(g.player.GhostModeCooldown)
 		}
 		colliding := false
 		movementKeyPressed := false
@@ -300,7 +314,7 @@ func (g *Game) Update() error {
 			obsMaxX := float64(obstacle.Max.X)
 			obsMinY := float64(obstacle.Min.Y)
 			obsMaxY := float64(obstacle.Max.Y)
-			if obsMinX < minX(moveX, g) && obsMaxX > maxX(moveX, g) && obsMinY < minY(moveY, g) && obsMaxY > maxY(moveY, g) {
+			if !g.player.GhostMode && obsMinX < minX(moveX, g) && obsMaxX > maxX(moveX, g) && obsMinY < minY(moveY, g) && obsMaxY > maxY(moveY, g) {
 				moveX = g.player.X
 				moveY = g.player.Y
 				colliding = true
@@ -845,7 +859,11 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		screen.DrawImage(frame, opts)
 		screen.DrawImage(g.Scenes[g.CurrentScene].Foreground, bgOpts)
 		g.dialogue.Draw(screen, g)
-
+		if g.player.GhostMode {
+			g.player.DrawGhostModeMeter(screen)
+		} else if g.player.GhostModeCooldown > 0 {
+			g.player.DrawGhostModeMeter(screen)
+		}
 	} else if g.state == TransitionState || g.state == NewSceneState {
 		scale := 0.25
 		bgOpts := &ebiten.DrawImageOptions{}
@@ -1256,15 +1274,16 @@ func main() {
 				alpha:          0.0,
 				fadeSpeed:      0.05,
 				player: &player.Player{
-					X:            gameState.PlayerPosition.X,
-					Y:            gameState.PlayerPosition.Y,
-					FrameWidth:   192 / 4, // The width of a single frame
-					FrameHeight:  68,      // The height of a single frame
-					FrameCount:   4,       // The total number of frames in the sprite sheet
-					SpriteSheets: spriteSheets,
-					Direction:    gameState.PlayerDirection, // Default direction
-					Speed:        7.0,
-					CanMove:      true,
+					X:              gameState.PlayerPosition.X,
+					Y:              gameState.PlayerPosition.Y,
+					FrameWidth:     192 / 4, // The width of a single frame
+					FrameHeight:    68,      // The height of a single frame
+					FrameCount:     4,       // The total number of frames in the sprite sheet
+					SpriteSheets:   spriteSheets,
+					Direction:      gameState.PlayerDirection, // Default direction
+					Speed:          7.0,
+					CanMove:        true,
+					GhostModeMeter: 600,
 				},
 			}
 		game.loadScenes()
