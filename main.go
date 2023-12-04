@@ -281,7 +281,7 @@ func (g *Game) Update() error {
 					fmt.Println(g.player.TickCounter)
 					// Key is pressed for the first time or after being released
 					g.player.KeyBeingPressed = true
-					if g.player.TickCounter-g.player.LastKeyPressTick <= 30 && g.player.TickCounter-g.player.LastKeyPressTick > 0 {
+					if g.player.TickCounter-g.player.LastKeyPressTick <= 15 && g.player.TickCounter-g.player.LastKeyPressTick > 0 {
 						g.player.IsRunning = true
 					}
 					g.player.LastKeyPressTick = g.player.TickCounter
@@ -298,7 +298,7 @@ func (g *Game) Update() error {
 					fmt.Println(g.player.TickCounter)
 					// Key is pressed for the first time or after being released
 					g.player.KeyBeingPressed = true
-					if g.player.TickCounter-g.player.LastKeyPressTick <= 30 && g.player.TickCounter-g.player.LastKeyPressTick > 0 {
+					if g.player.TickCounter-g.player.LastKeyPressTick <= 15 && g.player.TickCounter-g.player.LastKeyPressTick > 0 {
 						g.player.IsRunning = true
 					}
 					g.player.LastKeyPressTick = g.player.TickCounter
@@ -316,7 +316,7 @@ func (g *Game) Update() error {
 					fmt.Println(g.player.TickCounter)
 					// Key is pressed for the first time or after being released
 					g.player.KeyBeingPressed = true
-					if g.player.TickCounter-g.player.LastKeyPressTick <= 30 && g.player.TickCounter-g.player.LastKeyPressTick > 0 {
+					if g.player.TickCounter-g.player.LastKeyPressTick <= 15 && g.player.TickCounter-g.player.LastKeyPressTick > 0 {
 						g.player.IsRunning = true
 					}
 					g.player.LastKeyPressTick = g.player.TickCounter
@@ -333,7 +333,7 @@ func (g *Game) Update() error {
 					fmt.Println(g.player.TickCounter)
 					// Key is pressed for the first time or after being released
 					g.player.KeyBeingPressed = true
-					if g.player.TickCounter-g.player.LastKeyPressTick <= 30 && g.player.TickCounter-g.player.LastKeyPressTick > 0 {
+					if g.player.TickCounter-g.player.LastKeyPressTick <= 15 && g.player.TickCounter-g.player.LastKeyPressTick > 0 {
 						g.player.IsRunning = true
 					}
 					g.player.LastKeyPressTick = g.player.TickCounter
@@ -484,6 +484,165 @@ func (g *Game) Update() error {
 
 		g.keyZPressedLastFrame = ebiten.IsKeyPressed(ebiten.KeyZ)
 	} else if g.state == TimeStopped {
+		if ebiten.IsKeyPressed(ebiten.KeyG) && g.player.GhostModeCooldown <= 0 {
+			g.player.GhostMode = true
+		} else {
+			g.player.GhostMode = false
+		}
+		if g.player.GhostMode {
+			g.player.GhostModeMeter -= 1
+			if g.player.GhostModeMeter <= 0 {
+				g.player.GhostMode = false
+				g.player.GhostModeCooldown = 600 // 600 frames, 10 seconds
+			}
+		} else if g.player.GhostModeCooldown > 0 {
+			g.player.GhostModeCooldown -= 1
+			if g.player.GhostModeCooldown <= 0 {
+				fmt.Println("Ghost Mode Returned!")
+				g.player.GhostModeMeter = 600
+			}
+			fmt.Println(g.player.GhostModeCooldown)
+		}
+		colliding := false
+		movementKeyPressed := false
+		var moveX, moveY float64
+		g.player.TickCounter++
+		if g.player.CanMove {
+			// Handle player movement
+			if ebiten.IsKeyPressed(ebiten.KeyLeft) {
+				g.player.DoubleTapKey = ebiten.KeyLeft
+				if !g.player.KeyBeingPressed {
+					fmt.Println(g.player.TickCounter)
+					// Key is pressed for the first time or after being released
+					g.player.KeyBeingPressed = true
+					if g.player.TickCounter-g.player.LastKeyPressTick <= 15 && g.player.TickCounter-g.player.LastKeyPressTick > 0 {
+						g.player.IsRunning = true
+					}
+					g.player.LastKeyPressTick = g.player.TickCounter
+				}
+				X, Y := g.player.CheckMove("left")
+				g.player.Direction = "left"
+				moveX = X
+				moveY = Y
+				movementKeyPressed = true
+			}
+			if ebiten.IsKeyPressed(ebiten.KeyRight) {
+				g.player.DoubleTapKey = ebiten.KeyRight
+				if !g.player.KeyBeingPressed {
+					fmt.Println(g.player.TickCounter)
+					// Key is pressed for the first time or after being released
+					g.player.KeyBeingPressed = true
+					if g.player.TickCounter-g.player.LastKeyPressTick <= 15 && g.player.TickCounter-g.player.LastKeyPressTick > 0 {
+						g.player.IsRunning = true
+					}
+					g.player.LastKeyPressTick = g.player.TickCounter
+				}
+				X, Y := g.player.CheckMove("right")
+				g.player.Direction = "right"
+				moveX = X
+				moveY = Y
+				movementKeyPressed = true
+
+			}
+			if ebiten.IsKeyPressed(ebiten.KeyUp) {
+				g.player.DoubleTapKey = ebiten.KeyUp
+				if !g.player.KeyBeingPressed {
+					fmt.Println(g.player.TickCounter)
+					// Key is pressed for the first time or after being released
+					g.player.KeyBeingPressed = true
+					if g.player.TickCounter-g.player.LastKeyPressTick <= 15 && g.player.TickCounter-g.player.LastKeyPressTick > 0 {
+						g.player.IsRunning = true
+					}
+					g.player.LastKeyPressTick = g.player.TickCounter
+				}
+				X, Y := g.player.CheckMove("up")
+				g.player.Direction = "up"
+				moveX = X
+				moveY = Y
+				movementKeyPressed = true
+			}
+			if ebiten.IsKeyPressed(ebiten.KeyDown) {
+				g.player.DoubleTapKey = ebiten.KeyDown
+				if !g.player.KeyBeingPressed {
+					fmt.Println(g.player.TickCounter)
+					// Key is pressed for the first time or after being released
+					g.player.KeyBeingPressed = true
+					if g.player.TickCounter-g.player.LastKeyPressTick <= 15 && g.player.TickCounter-g.player.LastKeyPressTick > 0 {
+						g.player.IsRunning = true
+					}
+					g.player.LastKeyPressTick = g.player.TickCounter
+				}
+				X, Y := g.player.CheckMove("down")
+				g.player.Direction = "down"
+				moveX = X
+				moveY = Y
+				movementKeyPressed = true
+			}
+		}
+		g.player.KeyBeingPressed = ebiten.IsKeyPressed(g.player.DoubleTapKey)
+		if g.player.IsRunning && !g.player.KeyBeingPressed {
+			g.player.IsRunning = false
+		}
+		// if moveX != 0 {
+		// 	fmt.Println(minX(moveX, g), minY(moveY, g))
+		// 	fmt.Println(*g.obstacles[0])
+		// }
+
+		for _, obstacle := range g.Scenes[g.CurrentScene].obstacles {
+			obsMinX := float64(obstacle.Min.X)
+			obsMaxX := float64(obstacle.Max.X)
+			obsMinY := float64(obstacle.Min.Y)
+			obsMaxY := float64(obstacle.Max.Y)
+			if !g.player.GhostMode && obsMinX < minX(moveX, g) && obsMaxX > maxX(moveX, g) && obsMinY < minY(moveY, g) && obsMaxY > maxY(moveY, g) {
+				moveX = g.player.X
+				moveY = g.player.Y
+				colliding = true
+			}
+		}
+		for _, door := range g.Scenes[g.CurrentScene].doors {
+			obsMinX := float64(door.Rect.Min.X)
+			obsMaxX := float64(door.Rect.Max.X)
+			obsMinY := float64(door.Rect.Min.Y)
+			obsMaxY := float64(door.Rect.Max.Y)
+			if obsMinX < minX(moveX, g) && obsMaxX > maxX(moveX, g) && obsMinY < minY(moveY, g) && obsMaxY > maxY(moveY, g) {
+				if colliding {
+					g.state = TransitionState
+					g.CurrentDoor = door
+					g.Progress.HasVisitedRedTown = true
+				}
+			}
+		}
+		if g.player.CanMove {
+			// Handle player movement
+			if ebiten.IsKeyPressed(ebiten.KeyLeft) {
+				g.player.X = moveX
+				movementKeyPressed = true
+			}
+			if ebiten.IsKeyPressed(ebiten.KeyRight) {
+
+				g.player.X = moveX
+				movementKeyPressed = true
+			}
+			if ebiten.IsKeyPressed(ebiten.KeyUp) {
+				g.player.Y = moveY
+				movementKeyPressed = true
+			}
+			if ebiten.IsKeyPressed(ebiten.KeyDown) {
+				g.player.Y = moveY
+				movementKeyPressed = true
+			}
+			if movementKeyPressed {
+				// Increment the tick count
+				g.player.TickCount++
+			}
+
+		}
+
+		// Update the current frame every 10 ticks
+		if g.player.TickCount >= 10 {
+			g.player.CurrentFrame = (g.player.CurrentFrame + 1) % g.player.FrameCount
+			g.player.TickCount = 0 // Reset the tick count
+		}
 		if !ebiten.IsKeyPressed(ebiten.KeyS) {
 			g.state = PlayState
 		}
